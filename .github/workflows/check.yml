@@ -1,0 +1,46 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            emacs: "30.1"
+          - os: macos-latest
+            emacs: "30.2"
+    runs-on: ${{ matrix.os }}
+    env:
+      EMMET2_REVISION: ${{ vars.SCSS2_EMMET2_REVISION }}
+    steps:
+      - name: Require a published compatible Emmet2 revision
+        shell: bash
+        run: |
+          if [[ ! "$EMMET2_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'Set repository variable SCSS2_EMMET2_REVISION to the full commit SHA of the published Emmet2 checkout with emmet2-completion.el and emmet2-css-value.el.' >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+      - uses: purcell/setup-emacs@34c6ded44899fd1bf74d2889558befd1750e61a7
+        with:
+          version: ${{ matrix.emacs }}
+      - uses: actions/checkout@v7
+        with:
+          repository: P233/emmet2-mode
+          ref: ${{ env.EMMET2_REVISION }}
+          path: .dependencies/emmet2-mode
+      - name: Check editor and first package installation
+        env:
+          SCSS2_EMMET2_DIR: ${{ github.workspace }}/.dependencies/emmet2-mode
+        run: make check
+      - name: Build release package
+        run: make package
