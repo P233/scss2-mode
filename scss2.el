@@ -1,8 +1,8 @@
 ;;; scss2.el --- CSS and SCSS editing with one tree-sitter grammar -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2026 P233
+;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
-;; Author: P233
+;; Author: Peiwen Lu <hi@peiwen.lu>
 ;; Keywords: languages
 ;; URL: https://github.com/P233/scss2-mode
 

@@ -1,5 +1,6 @@
 ;;; scss2-edit.el --- Structural CSS and SCSS editing -*- lexical-binding: t; -*-
 
+;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:

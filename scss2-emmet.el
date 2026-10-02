@@ -1,11 +1,12 @@
 ;;; scss2-emmet.el --- Emmet expansion for stylesheets -*- lexical-binding: t; -*-
 
+;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
 ;; The stylesheet dispatcher decides where abbreviations are meaningful.
-;; Emmet2 owns live choices, previews and atomic insertion.  This host owns
-;; value navigation and requests insertion without YAS fields.
+;; Emmet2 owns live choices, previews and atomic insertion, which adds no
+;; snippet fields to CSS.  This host owns value navigation.
 
 ;;; Code:
 

@@ -1,5 +1,5 @@
 ;;; css2-mode.el --- CSS entry for the scss2-mode package -*- lexical-binding: t; -*-
-;; Copyright (C) 2026 P233
+;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;;; Commentary:
 ;; CSS uses the same editor modules as SCSS with literal CSS semantics.

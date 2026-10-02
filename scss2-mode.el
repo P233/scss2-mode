@@ -1,8 +1,8 @@
 ;;; scss2-mode.el --- Complete CSS and SCSS structural editing -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2026 P233
+;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
-;; Author: P233
+;; Author: Peiwen Lu <hi@peiwen.lu>
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "30.1") (emmet2-mode "2.0.0"))
 ;; Keywords: languages

@@ -1,6 +1,6 @@
 ;;; scss2-grammar.el --- Load the bundled CSS/SCSS grammar -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2026 P233
+;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:

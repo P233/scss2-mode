@@ -1,5 +1,6 @@
 ;;; scss2-context.el --- Completion roles at point -*- lexical-binding: t; -*-
 
+;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
