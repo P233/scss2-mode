@@ -71,6 +71,30 @@ Both completion paths use your existing frontend. This package does not change i
 (add-to-list 'completion-category-overrides '(scss2 (styles basic partial-completion)))
 ```
 
+Selector prefixes such as `.`, `#` and `::` share the selector's face. Numbers
+and units use distinct number and type faces; expression operators use the
+property-value face. Variables, functions, strings and comments keep their own
+faces. Colors follow the active theme's standard CSS and Font Lock faces.
+
+For lower highlighting memory in large files, set this before opening buffers:
+
+```elisp
+(setq scss2-fontify-details nil)
+```
+
+This leaves numbers, operators, brackets and delimiters without separate faces.
+Names, keywords, strings, comments and escapes remain highlighted; parsing,
+completion and structural editing are unchanged. The default is full highlighting.
+Reopen existing buffers after changing this option to free their old highlighting
+intervals. The option reduces highlighting memory, not the syntax tree's memory.
+
+After 30 seconds of idle time, buffers not displayed in any frame release their
+syntax trees and highlighting. Text and undo history stay intact; the next syntax
+request or redisplay rebuilds the needed data, so returning to a large file can
+take longer. Set `scss2-idle-release-delay` to `nil` to keep these resources, or
+customize its idle delay. Active completion sessions, indirect buffers and their
+base buffers, and parsers with custom ranges or notifiers are left alone.
+
 ### Commands and key bindings
 
 TAB uses `scss2-tab` in both modes. Other commands have no default bindings;
@@ -117,6 +141,7 @@ Each edit is atomic. Failed edits restore text, point, selection, and the kill r
 | Setting | Purpose |
 | --- | --- |
 | `scss2-enable-emmet` | Set to `nil` to disable abbreviations while keeping semantic completion |
+| `scss2-idle-release-delay` | Idle seconds before releasing invisible buffers' derived data; default 30, `nil` disables |
 | `css-indent-offset` | Set the indentation width |
 | `css-fontify-colors` | Control CSS color previews |
 | `scss2-grammar-cache-directory` | Choose where locally compiled parser libraries are stored |

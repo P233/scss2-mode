@@ -102,15 +102,44 @@ missing delimiter keeps it, so completion still works while typing."
       (setq node (treesit-node-parent node)))
     found))
 
+(defun scss2-context--explicit-selector-p (node limit)
+  "Whether NODE contains explicit selector syntax starting before LIMIT.
+Only descend through selector containers.  An ERROR or malformed attribute
+can hold an abbreviation's raw value, including selector-like punctuation."
+  (and (< (treesit-node-start node) limit)
+       (let ((type (treesit-node-type node)))
+         (if (member type '("selectors" "complex_selector" "compound_selector"))
+             (cl-loop for child = (treesit-node-child node 0 t)
+                      then (treesit-node-next-sibling child t)
+                      while (and child (< (treesit-node-start child) limit))
+                      thereis (scss2-context--explicit-selector-p child limit))
+           (and (not (treesit-node-check node 'has-error))
+                (or (member type '("class_selector" "attribute_selector" "namespace_selector"))
+                    (and (equal type "combinator")
+                         (member (treesit-node-text node t) '(">" "~")))))))))
+
 (defun scss2-context--declaration-shaped-p (selectors)
-  "Whether recovered SELECTORS reads as a declaration up to point.
+  "Whether SELECTORS absorbed an unfinished declaration at point.
 A pseudo-class has no blank after its colon, so `name: ' inside a selector
-with a parse error is a declaration typed above a nested rule."
-  (and (treesit-node-check selectors 'has-error)
-       (<= (treesit-node-start selectors) (point))
-       (string-match-p "\\`[[:alnum:]_-]+[ \t]*:[ \t\r\n]"
-                       (buffer-substring-no-properties
-                        (treesit-node-start selectors) (point)))))
+with a parse error is a declaration typed above a nested rule.  In a
+declaration body, a single unqualified token separated from the rest of
+SELECTORS by a blank line is also a declaration insertion slot.  Adjacent
+selector lines, explicit selector prefixes and pseudo chains keep their
+selector role."
+  (and (<= (treesit-node-start selectors) (point))
+       (or (and (treesit-node-check selectors 'has-error)
+                (string-match-p "\\`[[:alnum:]_-]+[ \t]*:[ \t\r\n]"
+                                (buffer-substring-no-properties
+                                 (treesit-node-start selectors) (point))))
+           (and (< (line-end-position) (treesit-node-end selectors))
+                (save-excursion
+                  (end-of-line)
+                  (looking-at "\r?\n[ \t]*\r?\n"))
+                (string-match-p "\\`[[:alpha:]_-][^ \t\r\n:;{}]*[ \t\r]*\\'"
+                                (buffer-substring-no-properties
+                                 (treesit-node-start selectors) (line-end-position)))
+                (not (scss2-context--explicit-selector-p selectors (line-end-position)))
+                (scss2--declaration-body-p (scss2-context--block-owner selectors))))))
 
 (defun scss2-context--selector-p (node)
   "Whether point at NODE is in an existing selector or its trailing gap."

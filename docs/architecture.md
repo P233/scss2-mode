@@ -55,11 +55,37 @@ interfaces above; private `--` helpers are owned by their library.
 3. Full mode composition adds Emmet, highlighting, navigation and the CAPF hook.
    A syntax-only client can stop after step 2.
 
+The shared query owns semantic capture roles; the host owns their faces.
+Selector prefixes inherit the selector role. Full highlighting uses the standard
+number face for numbers and nth formulas, and the type face for units.
+Expression operators retain the value face.
+Compact highlighting keeps the unit face while omitting numbers.
+The `number` and `unit` nodes and their ranges remain separate in the parser,
+independent of color, for syntax consumers and numeric editing.
+Selectors and properties use the built-in `css-selector` and `css-property`
+faces. The remaining roles use standard Font Lock faces, so themes own the
+palette without a mode-specific color scheme or theme dependency.
+
 The buffer's grammar identity stays fixed even if loading a newer package changes
 the global snapshot identity. Features read that buffer identity. Local module
 completion reuses a matching parser in an open buffer, including unsaved edits;
 otherwise it parses that authoritative text, or a disk file, in a temporary
 buffer. Temporary parsers die with their buffers. There is no module index.
+
+`scss2-syntax` owns one idle timer that releases trees and fontification from
+invisible buffers. It retains each parser's identity and compiled queries: an
+empty parse frees the native tree, then restoring the original full-buffer range
+marks it for lazy reparsing through every native consumer. No suspended-buffer
+registry or feature-specific resume path is needed. Font Lock invalidation and
+unfontification remove its managed properties; equal remaining property runs are
+coalesced without removing syntax or third-party properties. Text, narrowing,
+point, modification state and undo remain unchanged. The timer yields between
+buffers when input is pending and stops when no syntax clients remain.
+
+Visible buffers in all frames, active completion sessions, and indirect buffers
+and their bases are excluded. Parsers with custom ranges, notifiers, or additional
+parsers also remain untouched because they have other lifecycle owners. Cleanup
+does not force GC; freed allocations can remain resident in Emacs's allocator.
 
 ## Completion flow
 
@@ -69,6 +95,12 @@ declarations precede text recovery for unfinished statements. Order is language
 behavior. The result contains accessible replacement bounds, a role and only the
 facts consumers need (`:property`, `:owner`, `:module`, `:mixin`, `:query`, `:start`).
 No intermediate rule object or context cache is retained.
+
+A declaration prefix followed by a blank line and a nested selector can be
+parsed as one valid multiline selector. In a declaration body, completion treats
+that isolated, unqualified token as an insertion slot. Adjacent selector lines,
+explicit selector prefixes and pseudo chains retain their selector role; the
+syntax tree and highlighting are unchanged.
 
 Composition routes declaration prefixes to Emmet and other supported roles to
 semantic completion. The adapter's dynamic context binding only avoids analyzing

@@ -14,6 +14,7 @@
 
 (require 'cl-lib)
 (require 'css-mode)
+(require 'seq)
 (require 'scss2-grammar)
 (require 'treesit)
 (require 'subr-x)
@@ -25,6 +26,114 @@
   "Tree-sitter language this buffer's parser was created with.
 It stays fixed even when a reloaded package bundles another grammar.")
 
+(defvar-local scss2--queries nil
+  "Internal queries compiled for this buffer's fixed parser language.
+Only the package's finite set of query forms is retained, never syntax nodes
+or captured results.  Major-mode changes discard them with the parser.")
+
+(defvar scss2--idle-release-timer nil
+  "Idle timer for releasing resources in invisible stylesheet buffers.")
+
+(defcustom scss2-idle-release-delay 30
+  "Idle seconds before releasing invisible buffers' trees and highlighting.
+The next syntax or fontification request rebuilds them automatically.
+Buffers displayed in any frame, active completion sessions, and buffers
+sharing text through indirect buffers keep their resources.
+Set to nil to disable automatic release.  No garbage collection is forced."
+  :type '(choice (const :tag "Keep resources" nil)
+                 (number :tag "Idle seconds"))
+  :group 'scss2
+  :set (lambda (symbol value)
+         (set-default symbol value)
+         (when (fboundp 'scss2--schedule-idle-release)
+           (scss2--schedule-idle-release))))
+
+(defun scss2--schedule-idle-release ()
+  "Update the shared idle timer from `scss2-idle-release-delay'."
+  (when (timerp scss2--idle-release-timer)
+    (cancel-timer scss2--idle-release-timer))
+  (setq scss2--idle-release-timer
+        (when (and scss2-idle-release-delay
+                   (seq-some (lambda (buffer)
+                               (buffer-local-value 'scss2--parser-language buffer))
+                             (buffer-list)))
+          (run-with-idle-timer scss2-idle-release-delay t
+                               #'scss2--release-idle-buffers))))
+
+(defun scss2--release-buffer-resources ()
+  "Release this buffer's derived data, leaving its parser ready to reparse.
+Keep parser identity, queries, text, undo and non-fontification properties.
+Return non-nil when the buffer's sole parser belongs to this mode and can
+be released.  Custom ranges and parser notifiers require their own lifecycle."
+  (let* ((parsers (treesit-parser-list))
+         (parser (car parsers)))
+    (when (and scss2--parser-language parser (null (cdr parsers))
+               (eq (treesit-parser-language parser) scss2--parser-language)
+               (null (treesit-parser-included-ranges parser))
+               (null (treesit-parser-notifiers parser)))
+      (save-excursion
+        (save-restriction
+          (widen)
+          (when font-lock-mode
+            (with-silent-modifications
+              (font-lock-flush)
+              (font-lock-unfontify-region (point-min) (point-max))
+              (remove-list-of-text-properties (point-min) (point-max) '(fontified))
+              ;; Removing faces leaves fragmented interval nodes behind.
+              ;; Coalesce equal runs, preserving syntax and third-party properties.
+              (let ((position (point-min)))
+                (while (< position (point-max))
+                  (let ((end (next-property-change position nil (point-max)))
+                        (properties (text-properties-at position)))
+                    (set-text-properties position end properties)
+                    (setq position end))))))
+          ;; Deleting a Lisp parser defers native tree disposal until GC.
+          ;; An empty parse frees it now.  Restoring the full range only marks
+          ;; the same parser dirty: all existing consumers reparse on demand.
+          (let ((inhibit-quit t))
+            (unwind-protect
+                (progn
+                  (treesit-parser-set-included-ranges parser '((1 . 1)))
+                  (treesit-parser-root-node parser))
+              (treesit-parser-set-included-ranges parser nil)))))
+      t)))
+
+(defun scss2--release-idle-buffers ()
+  "Release invisible stylesheet buffers until user input is pending."
+  (if (null scss2-idle-release-delay)
+      (scss2--schedule-idle-release)
+    (let* ((buffers (buffer-list))
+           (bases (delq nil (mapcar #'buffer-base-buffer buffers)))
+           (stylesheets (seq-filter
+                         (lambda (buffer)
+                           (buffer-local-value 'scss2--parser-language buffer))
+                         buffers)))
+      (if (null stylesheets)
+          (scss2--schedule-idle-release)
+        (while (and stylesheets (not (input-pending-p)))
+          (let ((buffer (pop stylesheets)))
+            (when (and (buffer-live-p buffer)
+                       (not (get-buffer-window buffer t))
+                       (not (buffer-base-buffer buffer))
+                       (not (memq buffer bases)))
+              (with-current-buffer buffer
+                (unless (bound-and-true-p completion-in-region-mode)
+                  (with-demoted-errors "SCSS2 resource release: %S"
+                    (scss2--release-buffer-resources)))))))))))
+
+(defun scss2-syntax-unload-function ()
+  "Cancel the idle timer before unloading syntax support."
+  (when (timerp scss2--idle-release-timer)
+    (cancel-timer scss2--idle-release-timer))
+  (setq scss2--idle-release-timer nil))
+
+(defun scss2--query (query)
+  "Return the compiled form of internal QUERY for this buffer's parser."
+  (or (cdr (assoc query scss2--queries))
+      (let ((compiled (treesit-query-compile (scss2--language) query t)))
+        (push (cons query compiled) scss2--queries)
+        compiled)))
+
 (defun scss2-syntax-setup (dialect)
   "Initialize DIALECT after entering the buffer's base CSS/SCSS mode.
 Own the parser identity and lexical syntax shared by all stylesheet features.
@@ -32,9 +141,13 @@ Major-mode changes let Emacs discard the previous parser and local settings."
   (setq-local scss2-dialect dialect)
   (setq-local scss2--parser-language (scss2-grammar-ensure dialect))
   (treesit-parser-create scss2--parser-language)
+  (setq-local scss2--queries nil)
+  (scss2--query '((raw_text) @raw))
   (setq-local syntax-propertize-function #'scss2--syntax-propertize)
   (add-hook 'syntax-propertize-extend-region-functions
-            #'syntax-propertize-wholelines nil t))
+            #'syntax-propertize-wholelines nil t)
+  (unless scss2--idle-release-timer
+    (scss2--schedule-idle-release)))
 
 (defun scss2--syntax-propertize (start end)
   "Apply SCSS syntax properties between START and END.
@@ -42,8 +155,7 @@ Raw CSS and unquoted URLs cannot start silent comments.  Correct the
 inherited syntax table there so SMIE and comment commands see real code."
   (funcall css-syntax-propertize-function start end)
   (dolist (node (treesit-query-capture
-                (scss2--root-node)
-                '((raw_text) @raw) start end t))
+                (scss2--root-node) (scss2--query '((raw_text) @raw)) start end t))
     (save-excursion
       (goto-char (max start (treesit-node-start node)))
       (while (search-forward "/" (min end (treesit-node-end node)) t)
@@ -223,7 +335,8 @@ This also works before the parser can recognize an incomplete declaration."
   "Return (NAMESPACE . SOURCE) for every literal @use in this buffer.
 NAMESPACE is decoded.  A later @use of the same namespace comes first."
   (let (modules)
-    (dolist (capture (treesit-query-capture (scss2--root-node) '((use_statement) @use)))
+    (dolist (capture (treesit-query-capture (scss2--root-node)
+                                          (scss2--query '((use_statement) @use))))
       (let* ((node (cdr capture))
              (string (scss2--child node "string"))
              (alias (treesit-node-child-by-field-name node "alias"))

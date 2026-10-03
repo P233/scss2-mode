@@ -22,6 +22,18 @@
 (require 'scss2-completion)
 (require 'scss2-emmet)
 
+(defcustom scss2-fontify-details t
+  "Whether to highlight numbers, operators and punctuation.
+Numbers use the number face and units use the type face.
+Expression operators use the value face.
+When nil, retain names, keywords, strings, comments and escapes, using
+fewer text-property intervals in large buffers.  Parsing, completion and
+structural editing are unchanged.
+Set this before entering `scss2-mode' or `css2-mode'.  Reopen existing
+buffers after changing it so their old fontification intervals are freed."
+  :type 'boolean
+  :group 'scss2)
+
 (defconst scss2--faces
   '(("comment" . font-lock-comment-face)
     ("tag" . css-selector)
@@ -35,6 +47,7 @@
     ("constant.builtin" . font-lock-builtin-face)
     ("number" . font-lock-number-face)
     ("type" . font-lock-type-face)
+    ("type.unit" . font-lock-type-face)
     ("keyword" . font-lock-keyword-face)
     ("keyword.import" . font-lock-keyword-face)
     ("keyword.return" . font-lock-keyword-face)
@@ -45,6 +58,7 @@
     ("keyword.directive" . font-lock-keyword-face)
     ("keyword.modifier" . font-lock-keyword-face)
     ("operator" . font-lock-operator-face)
+    ("operator.expression" . font-lock-constant-face)
     ("string" . font-lock-string-face)
     ("string.escape" . font-lock-escape-face)
     ("punctuation.bracket" . font-lock-bracket-face)
@@ -65,7 +79,13 @@
                (face (cdr (assoc capture scss2--faces))))
           (unless face
             (error "Unmapped SCSS highlight capture: %s" capture))
-          (replace-match (concat "@" (symbol-name face)) t t))))
+          (replace-match
+           (if (and (not scss2-fontify-details)
+                    (member capture '("number" "operator" "operator.expression"
+                                      "punctuation.bracket" "punctuation.delimiter")))
+               ""
+             (concat "@" (symbol-name face)))
+           t t))))
     (buffer-string)))
 
 (defun scss2--font-lock-settings ()
@@ -100,7 +120,7 @@ Interpolation and comments inside NODE are left untouched."
     ;; Most contextual names are leaves, so cannot contain protected spans.
     (dolist (protected (when (> (treesit-node-child-count node) 0)
                         (treesit-query-capture
-                         node '([(interpolation) (block_comment) (inline_comment)] @protected)
+                         node (scss2--query '([(interpolation) (block_comment) (inline_comment)] @protected))
                          start end t)))
       (let ((boundary (min limit (treesit-node-start protected))))
         (when (< position boundary)

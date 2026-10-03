@@ -60,5 +60,44 @@
   (scss2-test-with-buffer 'scss2-mode "@function f($tone) { @each $item in red { dis│"
     (should-not (eq (plist-get (scss2-context-at-point) :role) 'property))))
 
+(ert-deftest scss2-context-declaration-before-a-separated-nested-rule ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (input '("o" "opacity" "o." "o.5" "m-" "m-.5" "c#fff" "m10+p20" "m10,p20"
+                    "p[1px]" "w[calc(100%-2rem)]" "ct['foo.bar']" "ct['>']"))
+      (scss2-test-with-buffer mode
+          (concat ".appShell { overflow: hidden; " input
+                  "│\n\n  &[data-is-resizing] { cursor: col-resize; }\n}")
+        (let ((context (scss2-context-at-point)))
+          (should (eq (plist-get context :role) 'property))
+          (should (equal (buffer-substring-no-properties (plist-get context :start) (point)) input)))))
+    (dolist (source '(".a { opa│city  \n  \n .b {} }" ".a { opa│city\r\n\r\n .b {} }"))
+      (scss2-test-with-buffer mode source
+        (should (eq (plist-get (scss2-context-at-point) :role) 'property))))))
+
+(ert-deftest scss2-context-separated-rule-recovery-preserves-selectors ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (source '(".a { m10│ {} }" ".a { m10│ > .child {} }"
+                      ".a { m10│\n  > .child {} }" ".a { div│\n  .child {} }"
+                      ".a { div│\n\n  {} }" ".a { .card│\n\n  .child {} }"
+                      ".a { #main│\n\n  .child {} }" ".a { &│\n\n  .child {} }"
+                      "div│\n\n.child {}" "@media screen { div│\n\n.child {} }"))
+      (scss2-test-with-buffer mode source
+        (should (eq (plist-get (scss2-context-at-point) :role) 'selector))))
+    (scss2-test-with-buffer mode ".a { a:ho│\n\n  .child {} }"
+      (should (eq (plist-get (scss2-context-at-point) :role) 'pseudo)))))
+
+(ert-deftest scss2-context-separated-rule-recovery-preserves-compound-selectors ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (selector '("a[href]" "div.card" "div.éclair" "div.🌟" "div._card"
+                        "div.-card" "div.\\61" "svg|path" "div>span" "div~span"))
+      (dolist (position '(1 nil))
+        (let ((offset (or position (length selector))))
+          (scss2-test-with-buffer mode
+              (concat ".a { " (substring selector 0 offset) "│"
+                      (substring selector offset) "\n\n.child {} }")
+            (ert-info ((format "%s: %s at %s" mode selector offset))
+              (should-not (treesit-node-check (scss2--root-node) 'has-error))
+              (should (eq (plist-get (scss2-context-at-point) :role) 'selector)))))))))
+
 (provide 'scss2-context-test)
 ;;; scss2-context-test.el ends here

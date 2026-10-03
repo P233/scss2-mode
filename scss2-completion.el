@@ -67,7 +67,8 @@
      (mapcar #'cdr
              (treesit-query-capture
               (scss2--root-node)
-              (mapconcat (lambda (type) (format "(%s) @definition" type)) types "\n"))))))
+              (scss2--query
+               (mapconcat (lambda (type) (format "(%s) @definition" type)) types "\n")))))))
 
 (defun scss2-completion--bound-p (node position)
   "Whether variable declaration NODE is complete before POSITION.
@@ -188,12 +189,13 @@ server.  This intentionally does not retain a second project index."
 (defun scss2-completion--exports (root types)
   "Return public top-level names in ROOT matching TYPES."
   (let (names)
-    (dolist (child (scss2--children root t))
-      (when (member (treesit-node-type child) types)
-        (let* ((node (treesit-node-child-by-field-name child "name"))
-               (text (scss2--identifier-text node)))
-          (when (and text (not (string-match-p "\\`\\$?[-_]" (scss2--decode-identifier text))))
-            (push text names)))))
+    ;; Stop at direct children and materialize only matching definitions.
+    (dolist (entry (cdr (treesit-induce-sparse-tree
+                        root (concat "\\`" (regexp-opt types t) "\\'") nil 1)))
+      (let* ((node (treesit-node-child-by-field-name (car entry) "name"))
+             (text (scss2--identifier-text node)))
+        (when (and text (not (string-match-p "\\`\\$?[-_]" (scss2--decode-identifier text))))
+          (push text names))))
     names))
 
 (defun scss2-completion--module-names (module types)
@@ -218,14 +220,22 @@ A CSS module has no Sass members to export, so it needs no second parse."
           (when (condition-case nil
                     (progn
                       (if existing
-                          (insert (with-current-buffer existing
-                                    (save-restriction
-                                      (widen)
-                                      (buffer-substring-no-properties (point-min) (point-max)))))
+                          (let ((target (current-buffer)))
+                            (with-current-buffer existing
+                              (save-restriction
+                                (widen)
+                                (with-current-buffer target
+                                  (insert-buffer-substring-no-properties existing)))))
                         (insert-file-contents path))
                       t)
                   (file-error nil))
-            (scss2-completion--exports (treesit-parser-root-node (treesit-parser-create language)) types)))))))
+            (let ((parser (treesit-parser-create language)))
+              (unwind-protect
+                  (scss2-completion--exports (treesit-parser-root-node parser) types)
+                ;; Deleting a parser leaves its native tree allocated until GC.
+                ;; Replace this temporary tree with an empty one before exit.
+                (treesit-parser-set-included-ranges parser '((1 . 1)))
+                (treesit-parser-root-node parser)))))))))
 
 (defun scss2-completion--values (property &optional at-rule)
   "Return shared CSS values for PROPERTY in AT-RULE plus visible Sass names."
@@ -324,8 +334,9 @@ Sass loads `_name.scss' and `name.scss' as `name', so offer that name too."
                        ;; A value reads functions and variables, never mixins.
                        (_ '("function_definition" "variable_declaration"))))
               (names (if module (scss2-completion--module-names module types)
-                       (scss2-completion--names types (eq role 'variable)))))
-         (mapcar (lambda (name) (cons name (if module (concat "From " module) "Current scope"))) names)))
+                       (scss2-completion--names types (eq role 'variable))))
+              (documentation (if module (concat "From " module) "Current scope")))
+         (mapcar (lambda (name) (cons name documentation)) names)))
       ('argument
        (let* ((name (scss2-completion--sass-name (or (plist-get context :mixin) "")))
               ;; Visible definitions arrive in source order.  The last one
@@ -342,11 +353,12 @@ Sass loads `_name.scss' and `name.scss' as `name', so offer that name too."
                             (mapcar (lambda (entry) (cons (concat (scss2-completion--text (cdr entry)) ": ") "Mixin argument"))
                                     (when-let* ((parameters
                                                  (treesit-node-child-by-field-name definition "parameters")))
-                                      (treesit-query-capture parameters '((parameter name: (variable_name) @parameter))))))))
+                                      (treesit-query-capture
+                                       parameters (scss2--query '((parameter name: (variable_name) @parameter)))))))))
          (append parameters (scss2-completion--values nil))))
       ('custom-property
        (cl-loop for capture in (treesit-query-capture (scss2--root-node)
-                                                      '((property_declaration name: (property_name) @property)))
+                                                      (scss2--query '((property_declaration name: (property_name) @property))))
                 for name = (scss2--identifier-name (cdr capture))
                 when (and name (string-prefix-p "--" name))
                 collect (cons (scss2-completion--custom-property-spelling name) "Custom property"))))))
@@ -369,11 +381,11 @@ classifies point nor invokes abbreviation completion; composition owns both."
          (list begin end
                (scss2-completion--paths (buffer-substring-no-properties begin end))
                :exclusive t :company-kind (lambda (_) 'file))))
-      (_ (let* ((entries (save-restriction (widen) (scss2-completion--candidates context)))
-                (role (plist-get context :role))
+      (_ (let* ((role (plist-get context :role))
                 (sass (memq role '(variable mixin argument module-member for-range))))
            (emmet2-completion-capf
-            (plist-get context :beg) (plist-get context :end) entries
+            (plist-get context :beg) (plist-get context :end)
+            (lambda () (save-restriction (widen) (scss2-completion--candidates context)))
             :category 'scss2
             :identity (if sass #'scss2-completion--sass-name #'scss2--decode-identifier)
             :fuzzy (not (or sass (eq role 'custom-property)))

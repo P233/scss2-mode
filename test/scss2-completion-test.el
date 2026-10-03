@@ -454,6 +454,64 @@
       (kill-buffer module-buffer)
       (delete-directory directory t))))
 
+(ert-deftest scss2-completion-module-exports-stay-at-top-level ()
+  (scss2-completion-test--with
+      'scss
+      (concat "$first: red; .nested { $inner: red; @mixin inner() {} }\n"
+              "@mixin paint() { $inside: red; } $last: blue;\n"
+              "@function scale($n) { @return $n; }\n"
+              "$-hidden: red; $_hidden: red; $\\5f hidden: red;\n"
+              "@mixin \\2d hidden() {} @function _hidden() { @return 1; } |")
+    (let ((root (scss2--root-node)))
+      (should (equal (scss2-completion--exports root '("variable_declaration"))
+                     '("$last" "$first")))
+      (should (equal (scss2-completion--exports root '("mixin_definition")) '("paint")))
+      (should (equal (scss2-completion--exports root '("function_definition")) '("scale")))
+      (should (equal (scss2-completion--exports
+                      root '("variable_declaration" "mixin_definition" "function_definition"))
+                     '("scale" "$last" "paint" "$first"))))))
+
+(ert-deftest scss2-completion-temporary-module-releases-tree-on-exit ()
+  (let* ((directory (make-temp-file "scss2-module-lifetime-" t))
+         (path (expand-file-name "_theme.scss" directory)))
+    (unwind-protect
+        (progn
+          (with-temp-file path
+            (insert "$tone: red;")
+            (dotimes (i 100) (insert (format ".rule%d { color: red; }\n" i))))
+          (dolist (failure '(nil error quit))
+            (scss2-completion-test--with 'scss "@use 'theme'; .a { color: theme.$|; }"
+              (setq buffer-file-name (expand-file-name "main.scss" directory))
+              (let ((host (current-buffer))
+                    (read-root (symbol-function 'treesit-parser-root-node))
+                    (exports (symbol-function 'scss2-completion--exports))
+                    counts buffers)
+                (cl-letf (((symbol-function 'treesit-parser-root-node)
+                           (lambda (parser)
+                             (let ((root (funcall read-root parser)))
+                               (unless (eq (current-buffer) host)
+                                 (push (treesit-node-child-count root t) counts)
+                                 (push (current-buffer) buffers))
+                               root)))
+                          ((symbol-function 'scss2-completion--exports)
+                           (lambda (&rest args)
+                             (if failure (signal failure '("Interrupted module export"))
+                               (apply exports args)))))
+                  (if failure
+                      (should
+                       (equal (condition-case err
+                                  (scss2-completion--module-names "theme" '("variable_declaration"))
+                                ((error quit) err))
+                              (list failure "Interrupted module export")))
+                    (should (equal (scss2-completion--module-names "theme" '("variable_declaration"))
+                                   '("$tone")))))
+                ;; Even an interrupted lookup must not leave a large native tree
+                ;; waiting for the next Lisp GC.  No timing/RSS threshold is needed.
+                (should (> (car (last counts)) 100))
+                (should (zerop (car counts)))
+                (should (cl-every (lambda (buffer) (not (buffer-live-p buffer))) buffers))))))
+      (delete-directory directory t))))
+
 (ert-deftest scss2-completion-open-module-reuses-parser-and-preserves-buffer ()
   (let* ((directory (make-temp-file "scss2-open-module-" t))
          (path (expand-file-name "_theme.scss" directory))
@@ -1393,6 +1451,8 @@
     (scss2-completion-test--with dialect ".a { width: cal|; }"
       (let* ((capf (scss2-completion-at-point))
              (exit (plist-get (nthcdr 3 capf) :exit-function)))
+        ;; A frontend queries the table before replacing and accepting its choice.
+        (should (member "calc()" (scss2-completion-test--all "cal" (nth 2 capf))))
         (delete-region (car capf) (cadr capf)) (insert "calc()")
         (funcall exit "calc()" 'finished)
         (should (equal (buffer-string) ".a { width: calc(); }"))
