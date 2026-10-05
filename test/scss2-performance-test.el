@@ -83,6 +83,65 @@
                        '("$one" "$two")))
         (should (zerop calls))))))
 
+(defun scss2-performance-test--eager-compilations ()
+  "Return internal query compilations in a new buffer's setup and first use."
+  (let ((compile (symbol-function 'treesit-query-compile)) (count 0))
+    (with-temp-buffer
+      (rename-buffer "scss2-session-query-test" t)
+      (insert "$x: a; $m: (foo/**/#{$x}: red);\n.a { color: $ }")
+      ;; Emacs 31 setup also eagerly compiles font-lock rule objects via its own cache.
+      (cl-letf (((symbol-function 'treesit-query-compile)
+                 (lambda (language query &optional eager)
+                   (when (and eager (not (treesit-compiled-query-p query)))
+                     (cl-incf count))
+                   (funcall compile language query eager))))
+        (let ((css-fontify-colors nil)) (scss2-mode))
+        (let ((noninteractive nil)) (font-lock-mode 1))
+        (font-lock-ensure)
+        (goto-char (- (point-max) 2))
+        (should (member "$x" (all-completions "$" (nth 2 (scss2-completion-at-point))))))
+      (goto-char (point-min)) (search-forward "foo")
+      (should (eq (get-text-property (match-beginning 0) 'face) 'css-property)))
+    count))
+
+(ert-deftest scss2-performance-new-buffers-reuse-session-queries ()
+  (scss2-performance-test--eager-compilations)
+  (should (zerop (scss2-performance-test--eager-compilations)))
+  ;; Each buffer's fixed grammar identity still selects its own compiled query.
+  (should (equal (mapcar (lambda (mode)
+                           (with-temp-buffer
+                             (funcall mode)
+                             (treesit-query-language (scss2--query '((raw_text) @raw)))))
+                         '(css2-mode scss2-mode))
+                 (list (scss2-grammar-language 'css) (scss2-grammar-language 'scss)))))
+
+(ert-deftest scss2-performance-css-data-loads-on-first-semantic-completion ()
+  ;; Only a fresh process shows what loading the mode alone reads.
+  (with-temp-buffer
+    (let* ((program
+            `(progn
+               (setq load-path ',load-path load-prefer-newer ,load-prefer-newer)
+               (require 'scss2-mode)
+               (setq scss2-grammar-cache-directory ,scss2-grammar-cache-directory)
+               (advice-add 'scss2-grammar--compile :override
+                           (lambda (&rest _) (error "The suite's grammar cache was not reused")))
+               (when (featurep 'emmet2-css-data)
+                 (error "Loading scss2-mode also loaded Emmet's CSS data"))
+               (with-temp-buffer
+                 (insert ".a {\n  display: fl\n}")
+                 (scss2-mode)
+                 (goto-char (point-min))
+                 (search-forward "fl")
+                 (let ((candidates (all-completions "fl" (nth 2 (scss2-completion-at-point)))))
+                   (unless (member "flex" candidates)
+                     (error "Value completion did not offer flex: %S" candidates))))
+               (unless (featurep 'emmet2-css-data)
+                 (error "Value completion did not load Emmet's CSS data"))))
+           (status
+            (call-process (expand-file-name invocation-name invocation-directory)
+                          nil t nil "-Q" "--batch" "--eval" (prin1-to-string program))))
+      (ert-info ((buffer-string)) (should (eq status 0))))))
+
 (ert-deftest scss2-performance-syntax-query-is-reused-after-edits ()
   (dolist (mode '(css2-mode scss2-mode))
     (with-temp-buffer

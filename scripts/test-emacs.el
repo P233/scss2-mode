@@ -33,8 +33,8 @@
     (push (expand-file-name emmet-directory) load-path))
   (unwind-protect
       (progn
-        (unless (and (not (version< emacs-version "30.1")) (treesit-available-p))
-          (error "Tests require Emacs 30.1+ built with tree-sitter"))
+        (unless (and (not (version< emacs-version "31.1")) (treesit-available-p))
+          (error "Tests require Emacs 31.1+ built with tree-sitter"))
         ;; Required integration tests must not silently skip a missing engine.
         (when (equal suite "all")
           (require 'emmet2-mode)

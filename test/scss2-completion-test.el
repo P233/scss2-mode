@@ -530,18 +530,11 @@
             (setq buffer-file-name (expand-file-name "main.scss" directory))
             ;; A reloaded package must not replace either live buffer's language.
             (let ((scss2-grammar--content-id (make-string 64 ?e))
-                  (create (symbol-function 'treesit-parser-create))
                   (state (with-current-buffer module-buffer
                            (list (point-min) (point-max) (point) (buffer-chars-modified-tick)
                                  (treesit-parser-list) buffer-undo-list))))
               (cl-letf (((symbol-function 'treesit-parser-create)
-                         (lambda (&rest args)
-                           ;; Emacs 30's root lookup calls create even to reuse
-                           ;; an existing parser; assert identity, not call count.
-                           (let* ((before (treesit-parser-list))
-                                  (parser (apply create args)))
-                             (should (memq parser before))
-                             parser))))
+                         (lambda (&rest _) (ert-fail "Completion must reuse the open parser"))))
                 (should (equal (scss2-completion-test--names) '("$tone")))
                 (should (equal state (with-current-buffer module-buffer
                                        (list (point-min) (point-max) (point) (buffer-chars-modified-tick)
@@ -583,10 +576,8 @@
                           ((symbol-function 'treesit-parser-create)
                            (lambda (&rest args)
                              (should (eq (car args) language))
-                             (let* ((before (treesit-parser-list))
-                                    (parser (apply create args)))
-                               (unless (memq parser before) (cl-incf created))
-                               parser))))
+                             (cl-incf created)
+                             (apply create args))))
                   (should (equal (scss2-completion-test--names)
                                  (if open '("$unsaved") '("$saved"))))
                   (should (= created 1))
@@ -1178,15 +1169,9 @@
             (erase-buffer) (insert "$unsaved: blue;"))
           (scss2-completion-test--with 'scss "@use 'alias'; .a { color: alias.$|; }"
             (setq buffer-file-name (expand-file-name "main.scss" directory))
-            (let ((create (symbol-function 'treesit-parser-create)))
-              (cl-letf (((symbol-function 'treesit-parser-create)
-                         (lambda (&rest args)
-                           ;; Emacs 30 also calls create to retrieve an existing parser.
-                           (let* ((before (treesit-parser-list))
-                                  (parser (apply create args)))
-                             (should (memq parser before))
-                             parser))))
-                (should (equal (scss2-completion-test--names) '("$unsaved")))))))
+            (cl-letf (((symbol-function 'treesit-parser-create)
+                       (lambda (&rest _) (ert-fail "Completion must reuse the open parser"))))
+              (should (equal (scss2-completion-test--names) '("$unsaved"))))))
       (when (buffer-live-p module)
         (with-current-buffer module (set-buffer-modified-p nil))
         (kill-buffer module))

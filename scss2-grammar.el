@@ -45,6 +45,10 @@ as one executable name, or cc when CC is unset."
   :type 'directory
   :group 'scss2)
 
+(defvar scss2-grammar--verified-libraries nil
+  "Native library files that have loaded since they were last built.
+Each entry is an absolute file name verified in this Emacs session.")
+
 (defun scss2-grammar--library-base ()
   "Return the private library base name for the bundled source."
   (concat "libtree-sitter-scss2-" (substring scss2-grammar--content-id 0 16)))
@@ -131,18 +135,24 @@ SCSS grammars or a different version of this package."
 
 (defun scss2-grammar-ensure (dialect)
   "Build and load the bundled grammar for DIALECT, then return its language.
-Existing native output is reused.  A failed build leaves no published
-library; a library that cannot load reports the runtime's diagnostic."
+Existing native output is reused.  Each library file is loaded to verify it
+once per session, and again after it is rebuilt.  A failed build leaves no
+published library; a library that cannot load reports the runtime's
+diagnostic."
   (unless (treesit-available-p)
     (user-error "scss2-mode requires Emacs built with Tree-sitter support"))
   (let* ((language (scss2-grammar-language dialect))
          (library (scss2-grammar--library-file)))
     (unless (scss2-grammar--library-present-p library)
+      (setq scss2-grammar--verified-libraries
+            (delete library scss2-grammar--verified-libraries))
       (scss2-grammar--compile library))
-    (let ((availability (treesit-language-available-p language t)))
-      (unless (car availability)
-        (user-error "Cannot load the bundled scss2-mode grammar from %s: %S"
-                    library (cdr availability))))
+    (unless (member library scss2-grammar--verified-libraries)
+      (let ((availability (treesit-language-available-p language t)))
+        (unless (car availability)
+          (user-error "Cannot load the bundled scss2-mode grammar from %s: %S"
+                      library (cdr availability))))
+      (push library scss2-grammar--verified-libraries))
     language))
 
 (provide 'scss2-grammar)

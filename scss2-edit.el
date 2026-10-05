@@ -490,8 +490,10 @@ Separate ranges preserve comments between an item and its separator."
 (defun scss2--token-signature (position)
   "Return the syntax token's type and spelling at POSITION, or nil in blanks."
   (when (<= (point-min) position (1- (point-max)))
-    (when-let* ((node (scss2--covering-node position)))
-      (cons (treesit-node-type node) (treesit-node-text node t)))))
+    (save-restriction
+      (widen)
+      (when-let* ((node (scss2--covering-node position)))
+        (cons (treesit-node-type node) (treesit-node-text node t))))))
 
 (defun scss2--kill-target (target)
   "Kill TARGET, retaining surrounding comments and unrelated whitespace.

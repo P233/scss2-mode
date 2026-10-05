@@ -6,7 +6,7 @@ Edit CSS and SCSS in Emacs with syntax highlighting, context-aware completion, s
 
 ## Requirements
 
-- **Emacs 30.1+**, built with Tree-sitter support.
+- **Emacs 31.1+**, built with Tree-sitter support.
 - **A C compiler** available to Emacs (`cc` by default).
 - **Python 3 and Git** to build the local package archive below.
 
@@ -88,12 +88,28 @@ completion and structural editing are unchanged. The default is full highlightin
 Reopen existing buffers after changing this option to free their old highlighting
 intervals. The option reduces highlighting memory, not the syntax tree's memory.
 
+Like built-in tree-sitter modes, both modes follow `treesit-max-buffer-size`: a
+larger buffer shows a warning and keeps plain `scss-mode` or `css-mode` behavior.
+The syntax tree takes tens of bytes per source byte, more for minified or
+generated CSS, so lower that limit if you open very large generated CSS.
+
 After 30 seconds of idle time, buffers not displayed in any frame release their
 syntax trees and highlighting. Text and undo history stay intact; the next syntax
 request or redisplay rebuilds the needed data, so returning to a large file can
 take longer. Set `scss2-idle-release-delay` to `nil` to keep these resources, or
 customize its idle delay. Active completion sessions, indirect buffers and their
-base buffers, and parsers with custom ranges or notifiers are left alone.
+base buffers, and parsers with custom ranges or other packages' notifiers are
+left alone.
+
+Typing in a narrowed buffer costs the same as in the widened buffer because both
+modes read the syntax tree in the same region as Font Lock: the whole buffer,
+unless `font-lock-dont-widen` is set. Defun motion, `M-q`, `transpose-sexps`,
+outline commands and `which-function-mode` find their targets in that tree too,
+then act only inside the restriction: motion stops at its edges, `M-q`
+reindents only the defun's accessible lines and does not fill a comment that
+begins before the restriction, and `transpose-sexps` refuses sexps that extend
+outside it. If narrowed editing is slow, see
+[Narrowing and the shared parser](docs/architecture.md#narrowing-and-the-shared-parser).
 
 ### Commands and key bindings
 
@@ -213,7 +229,7 @@ SCSS2_EMMET2_DIR=/path/to/emmet2-mode make check
 
 Do not patch generated vendor files independently. The manifest records imported content, including uncommitted changes. Releases should use a committed snapshot and an installable emmet2-mode dependency.
 
-CI targets Linux/Emacs 30.1 and macOS/Emacs 30.2. Set the GitHub repository variable `SCSS2_EMMET2_REVISION` to the full 40-character commit SHA of a published compatible Emmet2 checkout containing `emmet2-completion.el` and `emmet2-css-value.el`. CI fails before setup if that pin is absent. Passing local checks does not imply passing hosted CI.
+CI targets Emacs 31.1 on Linux and macOS. Set the GitHub repository variable `SCSS2_EMMET2_REVISION` to the full 40-character commit SHA of a published compatible Emmet2 checkout containing `emmet2-completion.el` and `emmet2-css-value.el`. CI fails before setup if that pin is absent. Passing local checks does not imply passing hosted CI.
 
 </details>
 

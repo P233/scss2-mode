@@ -132,6 +132,46 @@
             (ert-info ((format "%s %S" mode text))
               (should (equal incremental fresh)))))))))
 
+(defvar scss2-highlighting-test--parses 0
+  "Number of reparses since the counter was last reset.")
+
+(defun scss2-highlighting-test--count (&rest _)
+  "Count one reparse."
+  (setq scss2-highlighting-test--parses (1+ scss2-highlighting-test--parses)))
+
+(ert-deftest scss2-highlighting-early-tree-reads-keep-other-lines-current ()
+  ;; Emacs 31 hands a reparse's changed ranges only to the reader that caused it.
+  (dolist (entry '((".x { color: red; }\n@mixin m($a) {\n  width: $" "width: $" "a")
+                   ("/* open\n.a { color: red; }\nend *\n.c { color: blue; }\n" "end *" "/")))
+    (scss2-highlighting-test--with-buffer 'scss2-mode (car entry)
+      (let ((scss2-highlighting-test--parses 0))
+        (treesit-parser-add-notifier (car (treesit-parser-list))
+                                     #'scss2-highlighting-test--count)
+        (goto-char (point-min)) (search-forward (nth 1 entry))
+        (insert (nth 2 entry))
+        (treesit-node-at (point))
+        (run-hook-with-args 'pre-redisplay-functions nil)
+        (jit-lock-fontify-now)
+        (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+          (ert-info ((format "%S" text))
+            (should (= scss2-highlighting-test--parses 1))
+            (should (equal (scss2-highlighting-test--faces)
+                           (scss2-highlighting-test--with-buffer 'scss2-mode text
+                             (scss2-highlighting-test--faces))))))))))
+
+(ert-deftest scss2-highlighting-early-tree-reads-extend-syntax-propertization ()
+  (scss2-highlighting-test--with-buffer 'scss2-mode ".x { color: red; }\n@mixin m($a) {\n  width: $"
+    (syntax-ppss (point-max))
+    (let ((propertize syntax-propertize-function) starts)
+      (setq-local syntax-propertize-function
+                  (lambda (start end) (push start starts) (funcall propertize start end)))
+      (goto-char (point-max)) (insert "a")
+      (treesit-node-at (point))
+      (syntax-ppss (point-max))
+      ;; The reparse changed the mixin's header, before the edited line.
+      (goto-char (point-min)) (search-forward "@mixin")
+      (should (<= (apply #'min starts) (match-beginning 0))))))
+
 (ert-deftest scss2-highlighting-recovery-preserves-unowned-delimiters ()
   (dolist (mode '(scss2-mode css2-mode))
     (scss2-highlighting-test--with-buffer mode ".a{--x:#{m.#{x};x;} a.a{}"

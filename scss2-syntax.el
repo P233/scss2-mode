@@ -26,10 +26,11 @@
   "Tree-sitter language this buffer's parser was created with.
 It stays fixed even when a reloaded package bundles another grammar.")
 
-(defvar-local scss2--queries nil
-  "Internal queries compiled for this buffer's fixed parser language.
-Only the package's finite set of query forms is retained, never syntax nodes
-or captured results.  Major-mode changes discard them with the parser.")
+(defvar scss2--compiled-queries (make-hash-table :test #'equal)
+  "Internal queries compiled in this session, keyed by (LANGUAGE . QUERY).
+LANGUAGE is a buffer's fixed parser language and QUERY one of the package's
+finite query forms, so entries need no eviction.  Syntax nodes and captured
+results are never retained.")
 
 (defvar scss2--idle-release-timer nil
   "Idle timer for releasing resources in invisible stylesheet buffers.")
@@ -60,17 +61,66 @@ Set to nil to disable automatic release.  No garbage collection is forced."
           (run-with-idle-timer scss2-idle-release-delay t
                                #'scss2--release-idle-buffers))))
 
+;; See "Narrowing and the shared parser" in docs/architecture.md.
+(defmacro scss2--with-font-lock-view (&rest body)
+  "Evaluate BODY in the restriction that Font Lock fontifies.
+That is the widened buffer unless `font-lock-dont-widen' is non-nil."
+  (declare (indent 0) (debug t))
+  `(save-restriction
+     (unless font-lock-dont-widen (widen))
+     ,@body))
+
+(defvar-local scss2--released-tick nil
+  "Text modification tick at which idle release last emptied the tree.
+Reparses at this tick only empty the tree or rebuild it over unchanged text.")
+
+(defvar-local scss2--changed-start nil
+  "Earliest position that a reparse changed since syntax was propertized.")
+
+;; INTERIM (since 2026-10-03, until treesit.el hands every reparse's changed ranges
+;; to redisplay, upstream draft 09): see "Changed ranges of early reparses" in
+;; docs/architecture.md.
+(defun scss2--mark-changed-ranges (ranges parser)
+  "Mark RANGES that PARSER's reparse changed for refontification and syntax.
+Emacs 31 marks them only when redisplay itself reparses, so a tree read
+between an edit and redisplay would leave stale faces and syntax properties."
+  (with-current-buffer (treesit-parser-buffer parser)
+    (unless (eql scss2--released-tick (buffer-chars-modified-tick))
+      (save-restriction
+        (widen)
+        (with-silent-modifications
+          (pcase-dolist (`(,beginning . ,end) ranges)
+            ;; A labeled restriction, such as the long-line one, survives `widen'.
+            (setq beginning (max beginning (point-min)) end (min end (point-max)))
+            (when (< beginning end)
+              (put-text-property beginning end 'fontified nil)
+              (setq scss2--changed-start
+                    (min beginning (or scss2--changed-start beginning))))))))))
+
+(defun scss2--extend-to-changed-start (start end)
+  "Extend START..END back to `scss2--changed-start' within the restriction.
+Unlike flushing `syntax-ppss', this never asks `syntax-propertize' to start
+before a restriction that a reparse in Font Lock's view cannot see."
+  ;; Reparse first, so that the notifier records any pending change.
+  (scss2--with-font-lock-view (scss2--root-node))
+  (let ((changed (and scss2--changed-start (max scss2--changed-start (point-min)))))
+    (setq scss2--changed-start nil)
+    (when (and changed (< changed start))
+      (cons changed end))))
+
 (defun scss2--release-buffer-resources ()
   "Release this buffer's derived data, leaving its parser ready to reparse.
-Keep parser identity, queries, text, undo and non-fontification properties.
+Keep parser identity, text, undo and non-fontification properties.
 Return non-nil when the buffer's sole parser belongs to this mode and can
-be released.  Custom ranges and parser notifiers require their own lifecycle."
+be released.  Custom ranges and other packages' parser notifiers require
+their own lifecycle."
   (let* ((parsers (treesit-parser-list))
          (parser (car parsers)))
     (when (and scss2--parser-language parser (null (cdr parsers))
                (eq (treesit-parser-language parser) scss2--parser-language)
                (null (treesit-parser-included-ranges parser))
-               (null (treesit-parser-notifiers parser)))
+               (null (remq #'scss2--mark-changed-ranges
+                           (treesit-parser-notifiers parser))))
       (save-excursion
         (save-restriction
           (widen)
@@ -90,6 +140,8 @@ be released.  Custom ranges and parser notifiers require their own lifecycle."
           ;; Deleting a Lisp parser defers native tree disposal until GC.
           ;; An empty parse frees it now.  Restoring the full range only marks
           ;; the same parser dirty: all existing consumers reparse on demand.
+          ;; Both reparses report the whole buffer without a text change.
+          (setq scss2--released-tick (buffer-chars-modified-tick))
           (let ((inhibit-quit t))
             (unwind-protect
                 (progn
@@ -129,10 +181,10 @@ be released.  Custom ranges and parser notifiers require their own lifecycle."
 
 (defun scss2--query (query)
   "Return the compiled form of internal QUERY for this buffer's parser."
-  (or (cdr (assoc query scss2--queries))
-      (let ((compiled (treesit-query-compile (scss2--language) query t)))
-        (push (cons query compiled) scss2--queries)
-        compiled)))
+  (let ((key (cons (scss2--language) query)))
+    (or (gethash key scss2--compiled-queries)
+        (puthash key (treesit-query-compile (car key) query t)
+                 scss2--compiled-queries))))
 
 (defun scss2-syntax-setup (dialect)
   "Initialize DIALECT after entering the buffer's base CSS/SCSS mode.
@@ -140,12 +192,14 @@ Own the parser identity and lexical syntax shared by all stylesheet features.
 Major-mode changes let Emacs discard the previous parser and local settings."
   (setq-local scss2-dialect dialect)
   (setq-local scss2--parser-language (scss2-grammar-ensure dialect))
-  (treesit-parser-create scss2--parser-language)
-  (setq-local scss2--queries nil)
+  (treesit-parser-add-notifier (treesit-parser-create scss2--parser-language)
+                               #'scss2--mark-changed-ranges)
   (scss2--query '((raw_text) @raw))
   (setq-local syntax-propertize-function #'scss2--syntax-propertize)
   (add-hook 'syntax-propertize-extend-region-functions
             #'syntax-propertize-wholelines nil t)
+  (add-hook 'syntax-propertize-extend-region-functions
+            #'scss2--extend-to-changed-start nil t)
   (unless scss2--idle-release-timer
     (scss2--schedule-idle-release)))
 
@@ -154,8 +208,9 @@ Major-mode changes let Emacs discard the previous parser and local settings."
 Raw CSS and unquoted URLs cannot start silent comments.  Correct the
 inherited syntax table there so SMIE and comment commands see real code."
   (funcall css-syntax-propertize-function start end)
-  (dolist (node (treesit-query-capture
-                (scss2--root-node) (scss2--query '((raw_text) @raw)) start end t))
+  (dolist (node (scss2--with-font-lock-view
+                  (treesit-query-capture
+                   (scss2--root-node) (scss2--query '((raw_text) @raw)) start end t)))
     (save-excursion
       (goto-char (max start (treesit-node-start node)))
       (while (search-forward "/" (min end (treesit-node-end node)) t)

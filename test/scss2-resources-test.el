@@ -30,7 +30,7 @@
         (let ((faces (scss2-resources-test--faces))
               (text (buffer-substring-no-properties (point-min) (point-max)))
               (tick (buffer-chars-modified-tick)) (history buffer-undo-list)
-              (parser (car (treesit-parser-list))) (queries scss2--queries)
+              (parser (car (treesit-parser-list))) (query (scss2--query '((raw_text) @raw)))
               (root (scss2--root-node))
               (parse (symbol-function 'treesit-parser-root-node)) ranges)
           (narrow-to-region 2 (1- (point-max)))
@@ -43,7 +43,7 @@
           (should (equal ranges '(((1 . 1)))))
           (should (treesit-node-check root 'outdated))
           (should (eq parser (car (treesit-parser-list))))
-          (should (eq queries scss2--queries))
+          (should (eq query (scss2--query '((raw_text) @raw))))
           (should-not (treesit-parser-included-ranges parser))
           (should (= (point-min) 2)) (should (= (point-max) (length text)))
           (should (= (point) 5)) (should (= (mark) 7)) (should mark-active)
@@ -124,12 +124,58 @@
       (scss2-resources-test--fontify)
       (let ((parser (car (treesit-parser-list)))
             (faces (scss2-resources-test--faces)))
+        ;; The mode's own change notifier does not block release; others do.
+        (should (memq #'scss2--mark-changed-ranges (treesit-parser-notifiers parser)))
         (pcase client
           ('notifier (treesit-parser-add-notifier parser #'ignore))
           ('ranges (treesit-parser-set-included-ranges parser (list (cons 1 (point-max)))))
           ('second-parser (treesit-parser-create (scss2-grammar-ensure 'css))))
         (should-not (scss2--release-buffer-resources))
         (should (equal faces (scss2-resources-test--faces)))))))
+
+(defun scss2-resources-test--has-fontified-property ()
+  "Whether any accessible text carries a `fontified' property, even nil."
+  (let ((position (point-min)) found)
+    (while (and (not found) (< position (point-max)))
+      (setq found (plist-member (text-properties-at position) 'fontified)
+            position (next-property-change position nil (point-max))))
+    found))
+
+(ert-deftest scss2-resources-change-marking-is-registered-once ()
+  (with-temp-buffer
+    (insert ".a { color: red; }")
+    (dolist (mode '(scss2-mode css2-mode scss2-mode))
+      (funcall mode)
+      (should (equal (treesit-parser-notifiers (car (treesit-parser-list)))
+                     '(scss2--mark-changed-ranges))))
+    (scss2-syntax-setup 'scss)
+    (should (equal (treesit-parser-notifiers (car (treesit-parser-list)))
+                   '(scss2--mark-changed-ranges)))
+    (should (= (cl-count #'scss2--extend-to-changed-start
+                         syntax-propertize-extend-region-functions)
+               1))))
+
+(ert-deftest scss2-resources-release-reparses-mark-nothing ()
+  ;; Emptying and rebuilding the tree report the whole buffer as changed.
+  (dolist (mode '(css2-mode scss2-mode))
+    (with-temp-buffer
+      (insert ".card { color: red; }\n.title { margin: 0 2px; }\n")
+      (funcall mode)
+      (scss2-resources-test--fontify)
+      (syntax-ppss (point-max))
+      (should (scss2--release-buffer-resources))
+      (let ((propertize syntax-propertize-function) starts)
+        (setq-local syntax-propertize-function
+                    (lambda (start end) (push start starts) (funcall propertize start end)))
+        (should-not (scss2-resources-test--has-fontified-property))
+        (should (= (treesit-node-end (scss2--root-node)) (point-max)))
+        (should-not (scss2-resources-test--has-fontified-property))
+        ;; The next edit propertizes from its own line, not from the start of the buffer.
+        (goto-char (point-max)) (forward-line -1) (search-forward "margin") (insert " ")
+        (let ((line (line-beginning-position)))
+          (syntax-ppss (point-max))
+          (should starts)
+          (should (>= (apply #'min starts) line)))))))
 
 (ert-deftest scss2-resources-idle-keeps-visible-completing-and-shared-buffers ()
   (save-window-excursion

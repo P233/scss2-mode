@@ -76,6 +76,33 @@
     (should-not scss2-dialect)
     (should-not (treesit-parser-list))))
 
+(ert-deftest scss2-mode-oversized-buffers-keep-their-base-mode ()
+  (dolist (modes '((css2-mode . css-mode) (scss2-mode . scss-mode)))
+    (with-temp-buffer
+      (insert ".a { color: red; }")
+      (let ((base (with-temp-buffer (funcall (cdr modes)) font-lock-defaults))
+            (limit (position-bytes (1- (point-max))))
+            warnings)
+        ;; As in `treesit-ready-p', a buffer of exactly the limit is parsed.
+        (let ((treesit-max-buffer-size limit)) (funcall (car modes)))
+        (should (= (length (treesit-parser-list)) 1))
+        (cl-letf (((symbol-function 'display-warning)
+                   (lambda (type message &rest _) (push (list type message) warnings))))
+          (let ((treesit-max-buffer-size (1- limit))) (funcall (car modes))))
+        (should (equal warnings
+                       '((treesit "Cannot activate tree-sitter, because buffer larger than `treesit-max-buffer-size'"))))
+        (should (eq major-mode (car modes)))
+        (should-not (treesit-parser-list))
+        (should-not scss2-dialect)
+        (should (equal font-lock-defaults base))
+        (should (eq indent-line-function #'smie-indent-line))
+        (should (memq #'css-completion-at-point completion-at-point-functions))
+        (should-not (memq #'scss2-completion-at-point completion-at-point-functions))
+        (goto-char (point-min)) (search-forward "re")
+        (should-not (eq (key-binding (kbd "TAB")) #'scss2-tab))
+        (should-error (scss2-kill) :type 'user-error)
+        (should (equal (buffer-string) ".a { color: red; }"))))))
+
 (ert-deftest scss2-mode-parser-language-is-fixed-at-setup ()
   (dolist (mode '(css2-mode scss2-mode))
     (with-temp-buffer

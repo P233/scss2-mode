@@ -137,8 +137,8 @@
     (unwind-protect
         (condition-case failure
             (progn
-              (unless (and (not (version< emacs-version "30.1")) (treesit-available-p))
-                (error "Package test requires Emacs 30.1+ with tree-sitter"))
+              (unless (and (not (version< emacs-version "31.1")) (treesit-available-p))
+                (error "Package test requires Emacs 31.1+ with tree-sitter"))
               (with-temp-buffer
                 (unless (equal 0 (call-process
                                   (or (getenv "PYTHON") "python3") nil t nil

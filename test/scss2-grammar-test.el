@@ -114,6 +114,42 @@
           (should-not (file-exists-p (scss2-grammar--library-file))))
       (delete-directory scss2-grammar-cache-directory t))))
 
+(ert-deftest scss2-grammar-verifies-each-library-once-until-rebuilt ()
+  (let ((scss2-grammar-cache-directory (make-temp-file "scss2-verify-" t))
+        (treesit-load-name-override-list (copy-tree treesit-load-name-override-list))
+        (scss2-grammar--verified-libraries nil)
+        (present nil) (loadable nil) (builds 0) (checks 0))
+    (unwind-protect
+        (cl-letf (((symbol-function 'treesit-available-p) (lambda () t))
+                  ((symbol-function 'scss2-grammar--library-present-p) (lambda (_) present))
+                  ((symbol-function 'scss2-grammar--compile)
+                   (lambda (_) (cl-incf builds) (setq present t)))
+                  ((symbol-function 'treesit-language-available-p)
+                   (lambda (_language _detail)
+                     (cl-incf checks)
+                     (if loadable '(t) '(nil fixture-load-error)))))
+          ;; A library that cannot load is checked again on the next request.
+          (dotimes (_ 2)
+            (let ((failure (should-error (scss2-grammar-ensure 'scss) :type 'user-error)))
+              (should (string-match-p "fixture-load-error" (error-message-string failure)))))
+          (should (equal (list builds checks) '(1 2)))
+          (setq loadable t)
+          (dolist (dialect '(scss css scss css))
+            (scss2-grammar-ensure dialect))
+          (should (equal (list builds checks) '(1 3)))
+          ;; A rebuilt library must load again before it counts as verified.
+          (setq present nil)
+          (dotimes (_ 2) (scss2-grammar-ensure 'css))
+          (should (equal (list builds checks) '(2 4)))
+          ;; Verification is per library path, such as another cache directory's.
+          (let ((scss2-grammar-cache-directory
+                 (expand-file-name "other/" scss2-grammar-cache-directory)))
+            (scss2-grammar-ensure 'scss))
+          (should (equal (list builds checks) '(2 5)))
+          (scss2-grammar-ensure 'css)
+          (should (equal (list builds checks) '(2 5))))
+      (delete-directory scss2-grammar-cache-directory t))))
+
 (ert-deftest scss2-grammar-cold-build-loads-both-dialects-and-warm-cache-reuses ()
   ;; A new Emacs process cannot pass by reusing a language loaded by the suite.
   (let ((cache (make-temp-file "scss2-cold-build-" t))

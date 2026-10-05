@@ -162,25 +162,214 @@ commands while removing its overlapping automatic completion provider."
   (remove-hook 'completion-at-point-functions 'emmet2-css-value-capf t)
   (add-hook 'completion-at-point-functions #'scss2-completion-at-point -90 t))
 
+;; INTERIM (since 2026-10-03, until treesit.el reads its redisplay and syntax hooks
+;; in Font Lock's view, upstream draft 01): see "Narrowing and the shared parser"
+;; in docs/architecture.md.
+(defun scss2--pre-redisplay (&rest args)
+  "Call `treesit--pre-redisplay' with ARGS in Font Lock's view of the buffer."
+  (scss2--with-font-lock-view
+    (apply #'treesit--pre-redisplay args)))
+
+(defun scss2--pre-syntax-ppss (start end)
+  "Extend START..END like `treesit--pre-syntax-ppss', reading Font Lock's view.
+`syntax-propertize' rejects a start before the caller's accessible region."
+  (let ((minimum (point-min)))
+    (when-let* ((region (scss2--with-font-lock-view
+                          (treesit--pre-syntax-ppss start end))))
+      (cons (max minimum (car region)) (cdr region)))))
+
+(defconst scss2--widened-tree-hooks
+  '((pre-redisplay-functions treesit--pre-redisplay scss2--pre-redisplay)
+    (syntax-propertize-extend-region-functions
+     treesit--pre-syntax-ppss scss2--pre-syntax-ppss))
+  "Private treesit.el hook functions and the wrappers that replace them.
+Each entry is (HOOK ORIGINAL WRAPPER).  The wrappers read the tree in Font
+Lock's view: the widened buffer unless `font-lock-dont-widen' is non-nil.")
+
+(defun scss2--widen-tree-hooks ()
+  "Replace treesit.el's buffer-local tree hooks with Font Lock view wrappers.
+A hook whose original function is undefined or absent stays unchanged."
+  (pcase-dolist (`(,hook ,original ,wrapper) scss2--widened-tree-hooks)
+    (when (and (fboundp original) (memq original (symbol-value hook)))
+      (remove-hook hook original t)
+      (add-hook hook wrapper 0 t))))
+
+;; INTERIM (since 2026-10-03, until treesit.el commands read the tree in Font Lock's
+;; view, upstream draft 01): see "Narrowing and the shared parser" in docs/architecture.md.
+(defun scss2--move-in-font-lock-view (motion arg)
+  "Call MOTION with ARG in Font Lock's view, keeping point accessible.
+Return MOTION's value, or nil when its target lies outside the restriction;
+point then stops at the restriction's nearer edge, as regexp motion does."
+  (let ((minimum (point-min)) (maximum (point-max)) value target)
+    (scss2--with-font-lock-view
+      (setq value (funcall motion arg) target (point)))
+    (goto-char (max minimum (min maximum target)))
+    (and (<= minimum target maximum) value)))
+
+(defun scss2--push-mark-once (command)
+  "Push the mark when COMMAND starts a run of invocations, like treesit.el."
+  (or (not (eq this-command command))
+      (eq last-command command)
+      (and transient-mark-mode mark-active)
+      (push-mark)))
+
+(defun scss2--beginning-of-defun (&optional arg)
+  "Move like `treesit-beginning-of-defun' with ARG, within the restriction."
+  (interactive "^p")
+  (scss2--push-mark-once 'scss2--beginning-of-defun)
+  (scss2--move-in-font-lock-view #'treesit-beginning-of-defun arg))
+
+(defun scss2--end-of-defun (&optional arg _interactive)
+  "Move like `treesit-end-of-defun' with ARG, within the restriction."
+  (interactive "^p\nd")
+  (scss2--push-mark-once 'scss2--end-of-defun)
+  (scss2--move-in-font-lock-view #'treesit-end-of-defun arg))
+
+(defun scss2--indent-accessible-lines (start end)
+  "Reindent the lines from START to END whose indentation is accessible.
+`indent-region' widens to compute indentation, so skip a line that begins
+before the restriction or whose indentation crosses its end."
+  (let ((minimum (point-min)) (maximum (point-max)))
+    (save-excursion
+      (save-restriction
+        (widen)
+        (setq start (max start minimum) end (min end maximum))
+        (goto-char start)
+        (when (< (line-beginning-position) minimum)
+          (setq start (line-beginning-position 2)))
+        (when (< start end)
+          (goto-char (1- end))
+          (forward-line 0)
+          (when (> (save-excursion (skip-chars-forward " \t") (point)) maximum)
+            (setq end (point)))))
+      (when (< start end)
+        (indent-region start end)))))
+
+;; INTERIM (since 2026-10-03, until treesit-fill-reindent-defun decides fill or reindent
+;; outside the restriction, no upstream report yet): see "Tree-sitter commands" in
+;; docs/architecture.md.
+(defun scss2--fill-reindent-defun (&optional justify)
+  "Refill or reindent like `treesit-fill-reindent-defun' with JUSTIFY.
+Decide and find the defun in Font Lock's view, where a restriction cannot
+hide the start of a comment or string; reindent only accessible lines.
+Fill only when the restriction reads the same comment or string."
+  (let ((text (scss2--with-font-lock-view (prog--text-at-point-p))))
+    (cond
+     ((not text)
+      (let ((node (scss2--with-font-lock-view
+                    (let ((treesit-defun-tactic 'parent-first))
+                      (treesit-defun-at-point)))))
+        (unless node
+          (user-error "No defun detected at point"))
+        (scss2--indent-accessible-lines (treesit-node-start node) (treesit-node-end node))))
+     ((eql text (prog--text-at-point-p))
+      (treesit-fill-reindent-defun justify))
+     (t
+      (user-error "Comment or string at point depends on text outside the narrowed region")))))
+
+(defun scss2--transpose-sexps (arg)
+  "Return the sexps that `treesit-transpose-sexps' finds for ARG.
+Read the whole tree, but reject sexps outside the accessible region."
+  (let* ((minimum (point-min)) (maximum (point-max)) (origin (point))
+         (positions (scss2--with-font-lock-view (treesit-transpose-sexps arg))))
+    (unless (or (null positions)
+                (and (<= minimum (car positions) maximum)
+                     (<= minimum (cdr positions) maximum)))
+      (goto-char origin)
+      (user-error "Sexps to transpose extend outside the narrowed region"))
+    positions))
+
+(defun scss2--add-log-current-defun ()
+  "Return `treesit-add-log-current-defun' read from Font Lock's view."
+  (scss2--with-font-lock-view
+    (treesit-add-log-current-defun)))
+
+(defun scss2--outline-search (&optional bound move backward looking-at)
+  "Search like `treesit-outline-search' in the whole tree.
+BOUND, MOVE, BACKWARD and LOOKING-AT are as in `outline-search-function'.
+Find only heading lines that begin in the restriction."
+  (let ((minimum (point-min)) (maximum (point-max)) (origin (point)) found heading)
+    (scss2--with-font-lock-view
+      (setq found (treesit-outline-search bound move backward looking-at)
+            heading (point)))
+    (cond
+     (looking-at (and found (<= minimum found) found))
+     ((and found (<= minimum heading) (< heading maximum))
+      (goto-char heading)
+      (set-match-data (list heading (min (match-end 0) maximum)))
+      t)
+     (t
+      (goto-char (cond ((not move) origin)
+                       (bound (max minimum (min maximum bound)))
+                       (backward minimum)
+                       (t maximum)))
+      nil))))
+
+(defun scss2--outline-level ()
+  "Return `treesit-outline-level' read from Font Lock's view."
+  (scss2--with-font-lock-view
+    (treesit-outline-level)))
+
+(defconst scss2--widened-tree-functions
+  '((beginning-of-defun-function treesit-beginning-of-defun scss2--beginning-of-defun)
+    (end-of-defun-function treesit-end-of-defun scss2--end-of-defun)
+    (prog-fill-reindent-defun-function
+     treesit-fill-reindent-defun scss2--fill-reindent-defun)
+    (transpose-sexps-function treesit-transpose-sexps scss2--transpose-sexps)
+    (add-log-current-defun-function
+     treesit-add-log-current-defun scss2--add-log-current-defun)
+    (outline-search-function treesit-outline-search scss2--outline-search)
+    (outline-level treesit-outline-level scss2--outline-level))
+  "Variables that `treesit-major-mode-setup' sets, with their wrappers.
+Each entry is (VARIABLE ORIGINAL WRAPPER).  The wrappers find targets in Font
+Lock's view of the tree and act only in the caller's restriction.")
+
+(defconst scss2--widened-tree-remaps
+  '((beginning-of-defun treesit-beginning-of-defun scss2--beginning-of-defun)
+    (end-of-defun treesit-end-of-defun scss2--end-of-defun))
+  "Commands that `treesit-major-mode-setup' remaps in the mode map.
+Each entry is (COMMAND ORIGINAL WRAPPER).")
+
+(defun scss2--widen-tree-commands ()
+  "Point treesit.el's command variables and remaps at Font Lock view wrappers.
+A variable or remap no longer holding its treesit.el original stays unchanged."
+  (pcase-dolist (`(,variable ,original ,wrapper) scss2--widened-tree-functions)
+    (when (eq (symbol-value variable) original)
+      (set (make-local-variable variable) wrapper)))
+  (pcase-dolist (`(,command ,original ,wrapper) scss2--widened-tree-remaps)
+    (let ((key (format "<remap> <%s>" command)))
+      (when (eq (keymap-lookup (current-local-map) key nil t) original)
+        (keymap-set (current-local-map) key wrapper)))))
+
 (defun scss2--setup (dialect)
-  "Set up shared editing for DIALECT with exactly one SCSS-grammar parser."
-  (scss2-syntax-setup dialect)
-  (scss2-emmet-setup)
-  (add-to-list 'emulation-mode-map-alists 'scss2--tab-map-alist)
-  (setq-local treesit-font-lock-settings (scss2--font-lock-settings))
-  (setq-local treesit-font-lock-feature-list '((scss)))
-  ;; Emacs 29-31's internal subtree splitting loses contextual parent matches.
-  (setq-local treesit--font-lock-fast-mode nil)
-  (setq-local treesit-defun-type-regexp
-              (regexp-opt '("rule_set" "mixin_definition" "function_definition") t))
-  (setq-local treesit-defun-name-function #'scss2--defun-name)
-  (setq-local treesit-simple-imenu-settings
-              '(("Mixins" "\\`mixin_definition\\'" nil scss2--defun-name)
-                ("Functions" "\\`function_definition\\'" nil scss2--defun-name)
-                ("Rules" "\\`rule_set\\'" nil scss2--defun-name)))
-  (scss2--own-completion)
-  (add-hook 'emmet2-mode-hook #'scss2--own-completion nil t)
-  (treesit-major-mode-setup))
+  "Set up shared editing for DIALECT with exactly one SCSS-grammar parser.
+As in built-in tree-sitter modes, a buffer larger than
+`treesit-max-buffer-size' only warns and keeps its base mode."
+  ;; Same check and warning as `treesit-ready-p', which would load the grammar again.
+  (if (> (position-bytes (max (point-min) (1- (point-max))))
+         treesit-max-buffer-size)
+      (display-warning
+       'treesit
+       "Cannot activate tree-sitter, because buffer larger than `treesit-max-buffer-size'")
+    (scss2-syntax-setup dialect)
+    (scss2-emmet-setup)
+    (add-to-list 'emulation-mode-map-alists 'scss2--tab-map-alist)
+    (setq-local treesit-font-lock-settings (scss2--font-lock-settings))
+    (setq-local treesit-font-lock-feature-list '((scss)))
+    ;; Emacs 31's internal subtree splitting loses contextual parent matches.
+    (setq-local treesit--font-lock-fast-mode nil)
+    (setq-local treesit-defun-type-regexp
+                (regexp-opt '("rule_set" "mixin_definition" "function_definition") t))
+    (setq-local treesit-defun-name-function #'scss2--defun-name)
+    (setq-local treesit-simple-imenu-settings
+                '(("Mixins" "\\`mixin_definition\\'" nil scss2--defun-name)
+                  ("Functions" "\\`function_definition\\'" nil scss2--defun-name)
+                  ("Rules" "\\`rule_set\\'" nil scss2--defun-name)))
+    (scss2--own-completion)
+    (add-hook 'emmet2-mode-hook #'scss2--own-completion nil t)
+    (treesit-major-mode-setup)
+    (scss2--widen-tree-hooks)
+    (scss2--widen-tree-commands)))
 
 (provide 'scss2)
 ;;; scss2.el ends here

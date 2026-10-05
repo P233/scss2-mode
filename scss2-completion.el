@@ -14,8 +14,10 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'scss2-syntax)
-(require 'emmet2-css-data)
 (require 'emmet2-completion)
+
+;; Loading the CSS data parses Emmet's documentation JSON; defer it to first use.
+(autoload 'emmet2-css-data-query "emmet2-css-data")
 
 (defconst scss2-completion--media
   '(("width") ("height") ("aspect-ratio") ("resolution")
