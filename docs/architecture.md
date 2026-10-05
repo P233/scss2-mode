@@ -64,6 +64,29 @@ Like built-in tree-sitter modes, full mode composition checks
 keeps its base mode with the standard `treesit` warning. `scss2-syntax-setup`
 has no size check; syntax-only clients own that policy.
 
+Keymaps are shared by every buffer of a mode, so buffer state must not be
+written into them unconditionally. `treesit-major-mode-setup` does exactly that:
+it remaps `beginning-of-defun` and `end-of-defun` in the mode map, and a larger
+buffer opened before or after a parsed one would then run tree-sitter motion
+without a parser, leaving point in place. `scss2--scope-tree-remaps` turns each
+remap into a `menu-item` whose filter, `scss2--tree-binding`, returns the
+command only where `treesit-primary-parser` is set. Only
+`treesit-major-mode-setup` sets it, so oversized buffers and buffers whose setup
+failed are excluded. Elsewhere the filter returns the parent keymaps' remap,
+because a nil result would shadow remaps in `css-mode-map`, `scss-mode-map` or
+`prog-mode-map`; a larger buffer keeps the base mode's `C-M-a` and `C-M-e`.
+Help listings that render keymaps in a temporary buffer, such as `C-h m` and
+`\{scss2-mode-map}`, therefore omit the scoped remaps; `C-h b` and `C-h f` in a
+parsed buffer still show them. The remap scoping is INTERIM until treesit.el
+stops writing the shared map (upstream report draft 10, in tree-sitter-scss
+`plans/upstream-reports/`); it is separate from the narrowing wrappers and
+outlives them. To check whether a newer Emacs still needs it, delete the
+`scss2--scope-tree-remaps` call in a scratch copy:
+`scss2-mode-oversized-buffers-keep-base-defun-motion` fails while
+`treesit-major-mode-setup` still writes the remaps. If treesit.el stops
+remapping instead, `scss2-mode-parsed-buffers-remap-defun-motion` must expect
+`beginning-of-defun` and `end-of-defun`.
+
 The shared query owns semantic capture roles; the host owns their faces.
 Selector prefixes inherit the selector role. Full highlighting uses the standard
 number face for numbers and nth formulas, and the type face for units.
@@ -111,9 +134,15 @@ No intermediate rule object or context cache is retained.
 
 A declaration prefix followed by a blank line and a nested selector can be
 parsed as one valid multiline selector. In a declaration body, completion treats
-that isolated, unqualified token as an insertion slot. Adjacent selector lines,
-explicit selector prefixes and pseudo chains retain their selector role; the
-syntax tree and highlighting are unchanged.
+that isolated, unqualified token as an insertion slot. The same preference
+applies when the token occupies a new line after a semicolon-terminated
+declaration, even without an extra blank line before the nested rule. Comments
+between statements do not change this decision. This is an editing preference
+for ambiguous bare words, derived from sibling nodes rather than remembered
+typing state or a property catalog. Explicit selector prefixes, pseudo chains
+and leading combinators on the following line retain their selector role, as
+do adjacent selector lines without that preceding declaration. The syntax tree
+and highlighting are unchanged.
 
 Composition routes declaration prefixes to Emmet and other supported roles to
 semantic completion. The adapter's dynamic context binding only avoids analyzing
@@ -443,7 +472,11 @@ installation test fails, remove the two wrappers, `scss2--widened-tree-hooks`,
 fail. Once only
 `scss2-narrowing-tree-command-wrappers-replace-only-treesit-originals` fails,
 remove the wrappers, `scss2--widened-tree-functions`,
-`scss2--widened-tree-remaps`, `scss2--widen-tree-commands` and that test.
+`scss2--widened-tree-remaps`, `scss2--widen-tree-commands` and that test, and
+change the commands that `scss2-mode-parsed-buffers-remap-defun-motion` expects
+to `treesit-beginning-of-defun` and `treesit-end-of-defun`.
+Keep `scss2--scope-tree-remaps`: it then scopes treesit.el's own commands (see
+[Initialization and lifetime](#initialization-and-lifetime)).
 
 ## Changed ranges of early reparses
 

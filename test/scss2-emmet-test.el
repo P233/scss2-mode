@@ -23,6 +23,30 @@
     (let ((inhibit-message t)) (undo))
     (should (equal (buffer-string) ".a { m10 }"))))
 
+(ert-deftest scss2-emmet-adjacent-nested-rule-keeps-declaration-completion ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (accept '(command capf))
+      (with-temp-buffer
+        (insert ".a {\n  text-align: center;\n  m10\n  &[data-is-resizing] { cursor: col-resize; }\n}")
+        (funcall mode) (goto-char 1) (search-forward "m10")
+        (buffer-enable-undo)
+        (let ((before (buffer-string)))
+          (if (eq accept 'command)
+              (scss2-expand)
+            (let* ((capf (scss2-completion-at-point))
+                   (candidate (car (all-completions "m10" (nth 2 capf)))))
+              (should candidate)
+              (funcall (plist-get (nthcdr 3 capf) :exit-function) candidate 'finished)))
+          (should (equal (buffer-string)
+                         (string-replace "m10" "margin: 10px;\n  " before)))
+          (should (looking-at "\n  &"))
+          (undo-only 1)
+          (should (equal (buffer-string) before))
+          ;; A second declaration starts on the line that Emmet just created.
+          (scss2-expand)
+          (insert "p20")
+          (should (equal (plist-get (emmet2-context-analyze) :abbr) "p20")))))))
+
 (ert-deftest scss2-emmet-completion-inserts-current-result ()
   (scss2-emmet-test--buffer ".a { p1-2| }"
     (let* ((capf (scss2-completion-at-point))

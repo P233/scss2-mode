@@ -118,23 +118,43 @@ can hold an abbreviation's raw value, including selector-like punctuation."
                     (and (equal type "combinator")
                          (member (treesit-node-text node t) '(">" "~")))))))))
 
+(defun scss2-context--follows-declaration-p (selectors)
+  "Whether SELECTORS starts a new declaration line after a terminated one.
+Comments can separate the statements.  An explicit selector continuation
+on the following line keeps the selector role."
+  (let ((previous (treesit-node-prev-sibling (treesit-node-parent selectors) t)))
+    (while (and previous (member (treesit-node-type previous) '("block_comment" "inline_comment")))
+      (setq previous (treesit-node-prev-sibling previous t)))
+    (and previous (member (treesit-node-type previous) scss2--declaration-types)
+         (when-let* ((semicolon (scss2--child previous ";")))
+           (not (treesit-node-check semicolon 'missing)))
+         (save-excursion
+           (goto-char (treesit-node-start selectors))
+           (skip-chars-backward " \t")
+           (bolp))
+         (save-excursion
+           (end-of-line)
+           (forward-comment (point-max))
+           (not (memq (char-after) '(?> ?+ ?~ ?| ?,)))))))
+
 (defun scss2-context--declaration-shaped-p (selectors)
   "Whether SELECTORS absorbed an unfinished declaration at point.
 A pseudo-class has no blank after its colon, so `name: ' inside a selector
 with a parse error is a declaration typed above a nested rule.  In a
-declaration body, a single unqualified token separated from the rest of
-SELECTORS by a blank line is also a declaration insertion slot.  Adjacent
-selector lines, explicit selector prefixes and pseudo chains keep their
-selector role."
+declaration body, an unqualified token is also a declaration insertion slot
+when separated from the rest of SELECTORS by a blank line, or when it starts
+a new line after a terminated declaration.  Explicit selector prefixes,
+pseudo chains and selector continuations keep their selector role."
   (and (<= (treesit-node-start selectors) (point))
        (or (and (treesit-node-check selectors 'has-error)
                 (string-match-p "\\`[[:alnum:]_-]+[ \t]*:[ \t\r\n]"
                                 (buffer-substring-no-properties
                                  (treesit-node-start selectors) (point))))
            (and (< (line-end-position) (treesit-node-end selectors))
-                (save-excursion
-                  (end-of-line)
-                  (looking-at "\r?\n[ \t]*\r?\n"))
+                (or (save-excursion
+                      (end-of-line)
+                      (looking-at "\r?\n[ \t]*\r?\n"))
+                    (scss2-context--follows-declaration-p selectors))
                 (string-match-p "\\`[[:alpha:]_-][^ \t\r\n:;{}]*[ \t\r]*\\'"
                                 (buffer-substring-no-properties
                                  (treesit-node-start selectors) (line-end-position)))

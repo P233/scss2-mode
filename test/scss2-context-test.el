@@ -74,6 +74,68 @@
       (scss2-test-with-buffer mode source
         (should (eq (plist-get (scss2-context-at-point) :role) 'property))))))
 
+(ert-deftest scss2-context-declaration-before-an-adjacent-nested-rule ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (input '("m" "m10" "display" "o.5" "m-.5" "c#fff" "m10+p20" "m10,p20"
+                    "p[1px]" "w[calc(100%-2rem)]" "ct['foo.bar']" "ct['>']"))
+      (dolist (following '("&[data-is-resizing]" ".child" "button:hover"))
+        (scss2-test-with-buffer mode
+            (concat ".a {\n  text-align: center;\n  " input "│\n  " following " {}\n}")
+          (let ((context (scss2-context-at-point)))
+            (should (eq (plist-get context :role) 'property))
+            (should (equal (buffer-substring-no-properties (plist-get context :start) (point)) input))))))
+    (dolist (source '(".a { color: red;\n  opa│city\n  &[x] {} }"
+                      ".a { color: red; /* note */\n  m│\n  &[x] {} }"
+                      ".a { color: red;\n  /* note */\n  m│\n  &[x] {} }"
+                      ".a { color: red;\r\n\tm10│\r\n\t&[x] {} }"))
+      (scss2-test-with-buffer mode source
+        (should (eq (plist-get (scss2-context-at-point) :role) 'property)))))
+  (scss2-test-with-buffer 'scss2-mode ".a { $gap: 1rem;\n  m│\n  &[x] {} }"
+    (should (eq (plist-get (scss2-context-at-point) :role) 'property))))
+
+(ert-deftest scss2-context-adjacent-rule-recovery-preserves-selector-syntax ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (selector '(".card" "#main" "&" "a[href]" "div.card" "div.éclair"
+                        "div.\\61" "svg|path" "div>span" "div~span"))
+      (dolist (position '(1 nil))
+        (let ((offset (or position (length selector))))
+          (scss2-test-with-buffer mode
+              (concat ".a {\n  color: red;\n  " (substring selector 0 offset) "│"
+                      (substring selector offset) "\n  &[x] {}\n}")
+            (should (eq (plist-get (scss2-context-at-point) :role) 'selector))))))
+    (dolist (source '(".a { color: red;\n  div│\n  > .child {} }"
+                      ".a { color: red;\n  div│\n  + .child {} }"
+                      ".a { color: red;\n  div│\n  ~ .child {} }"
+                      ".a { color: red;\n  div│\n  /* continuation */ > .child {} }"
+                      ".a { color: red;\n  div│ {} }"
+                      ".a { color: red; m10│\n  &[x] {} }"
+                      ".a { .previous {}\n  div│\n  .child {} }"
+                      ".a { @media screen {}\n  div│\n  .child {} }"
+                      ".a { div│\n  .child {} }"))
+      (scss2-test-with-buffer mode source
+        (should (eq (plist-get (scss2-context-at-point) :role) 'selector))))
+    (scss2-test-with-buffer mode ".a { color: red;\n  a:ho│\n  &[x] {} }"
+      (should (eq (plist-get (scss2-context-at-point) :role) 'pseudo)))
+    (scss2-test-with-buffer mode ".a { color: red\n  m10│\n  &[x] {} }"
+      (should (eq (plist-get (scss2-context-at-point) :role) 'property-value)))))
+
+(ert-deftest scss2-context-adjacent-declaration-incremental-matches-fresh ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (scss2-test-with-buffer mode ".a {\n  color: red;\n  │\n  &[x] {}\n}"
+      (should (eq (plist-get (scss2-context-at-point) :role) 'property))
+      (dolist (event '(?m ?1 ?0 delete delete delete ?. ?c delete delete ?m ?1))
+        (if (eq event 'delete) (delete-char -1) (insert event))
+        (let* ((source (buffer-string)) (position (point))
+               (context (scss2-context-at-point)))
+          (should (eq (plist-get context :role)
+                      (if (string-match-p "\n  \\.c?\n" source) 'selector 'property)))
+          (with-temp-buffer
+            (insert source) (scss2-test-setup-buffer mode) (goto-char position)
+            (should (equal (scss2-context-at-point) context)))))
+      (let ((context (scss2-context-at-point)))
+        (narrow-to-region (line-beginning-position) (point-max))
+        (should (equal (scss2-context-at-point) context))))))
+
 (ert-deftest scss2-context-separated-rule-recovery-preserves-selectors ()
   (dolist (mode '(css2-mode scss2-mode))
     (dolist (source '(".a { m10│ {} }" ".a { m10│ > .child {} }"

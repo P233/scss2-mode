@@ -100,8 +100,74 @@
         (should-not (memq #'scss2-completion-at-point completion-at-point-functions))
         (goto-char (point-min)) (search-forward "re")
         (should-not (eq (key-binding (kbd "TAB")) #'scss2-tab))
+        (should (eq (key-binding (kbd "C-M-a")) #'beginning-of-defun))
+        (should (eq (key-binding (kbd "C-M-e")) #'end-of-defun))
         (should-error (scss2-kill) :type 'user-error)
         (should (equal (buffer-string) ".a { color: red; }"))))))
+
+(defun scss2-mode-test--open (mode &optional limit)
+  "Return a new buffer of two rules in MODE, set up with size LIMIT."
+  (let ((buffer (generate-new-buffer " *scss2-mode-test*")))
+    (with-current-buffer buffer
+      (insert ".a {\n  color: red;\n}\n.b {\n  margin: 0;\n}\n")
+      (cl-letf (((symbol-function 'display-warning) #'ignore))
+        (let ((treesit-max-buffer-size (or limit treesit-max-buffer-size)))
+          (funcall mode))))
+    buffer))
+
+(defun scss2-mode-test--defun-motion (buffer &optional commands)
+  "Return each command and its target from inside BUFFER's second rule.
+COMMANDS default to the bindings of C-M-a and C-M-e."
+  (with-current-buffer buffer
+    (mapcar (lambda (command)
+              (goto-char (point-min))
+              (search-forward "margin")
+              (call-interactively command)
+              (list command (point)))
+            (or commands
+                (list (key-binding (kbd "C-M-a")) (key-binding (kbd "C-M-e")))))))
+
+(ert-deftest scss2-mode-oversized-buffers-keep-base-defun-motion ()
+  ;; Parsed and oversized buffers share the mode map in either opening order.
+  (pcase-dolist (`(,mode ,base . ,maps)
+                 '((css2-mode css-mode css2-mode-map css-mode-map)
+                   (scss2-mode scss-mode scss2-mode-map scss-mode-map)))
+    (dolist (base-remap '(nil ignore))
+      (dolist (is-oversized-first '(nil t))
+        ;; Each case starts from fresh maps, so treesit.el has not written the mode map.
+        (cl-progv maps (list (make-sparse-keymap)
+                             ;; A nil filter result would shadow the base mode's remaps.
+                             (if base-remap
+                                 (define-keymap
+                                   "<remap> <beginning-of-defun>" base-remap
+                                   "<remap> <end-of-defun>" base-remap)
+                               (make-sparse-keymap)))
+          (let (buffers)
+            (unwind-protect
+                (let* ((plain (car (push (scss2-mode-test--open base) buffers)))
+                       (oversized (when is-oversized-first
+                                    (car (push (scss2-mode-test--open mode 1) buffers))))
+                       (parsed (car (push (scss2-mode-test--open mode) buffers))))
+                  (unless oversized
+                    (setq oversized (car (push (scss2-mode-test--open mode 1) buffers))))
+                  (should-not (with-current-buffer oversized (treesit-parser-list)))
+                  (should (equal (scss2-mode-test--defun-motion oversized)
+                                 (scss2-mode-test--defun-motion plain)))
+                  ;; A base remap would win in parsed buffers once treesit.el stops remapping.
+                  (unless base-remap
+                    (should (equal (mapcar #'cadr (scss2-mode-test--defun-motion parsed))
+                                   (mapcar #'cadr (scss2-mode-test--defun-motion
+                                                   parsed '(treesit-beginning-of-defun
+                                                            treesit-end-of-defun)))))))
+              (mapc #'kill-buffer buffers))))))))
+
+(ert-deftest scss2-mode-parsed-buffers-remap-defun-motion ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (let ((parsed (scss2-mode-test--open mode)))
+      (unwind-protect
+          (should (equal (mapcar #'car (scss2-mode-test--defun-motion parsed))
+                         '(scss2--beginning-of-defun scss2--end-of-defun)))
+        (kill-buffer parsed)))))
 
 (ert-deftest scss2-mode-parser-language-is-fixed-at-setup ()
   (dolist (mode '(css2-mode scss2-mode))

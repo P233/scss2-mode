@@ -341,6 +341,30 @@ A variable or remap no longer holding its treesit.el original stays unchanged."
       (when (eq (keymap-lookup (current-local-map) key nil t) original)
         (keymap-set (current-local-map) key wrapper)))))
 
+(defun scss2--tree-binding (map key command)
+  "Return COMMAND where `treesit-major-mode-setup' ran, else KEY in MAP's parent.
+A nil result would shadow the parent keymaps' remaps."
+  (if treesit-primary-parser
+      command
+    (keymap-lookup (keymap-parent map) key nil t)))
+
+;; INTERIM (since 2026-10-04, until treesit-major-mode-setup stops remapping in the
+;; shared mode map, upstream draft 10): see "Initialization and lifetime" in
+;; docs/architecture.md.
+(defun scss2--scope-tree-remaps ()
+  "Make the defun motion remaps apply only where `treesit-major-mode-setup' ran.
+That function writes them into the keymap that every buffer of the mode
+shares, including buffers above `treesit-max-buffer-size'."
+  (let ((map (current-local-map)))
+    (dolist (command '(beginning-of-defun end-of-defun))
+      (let* ((key (format "<remap> <%s>" command))
+             (binding (keymap-lookup map key nil t)))
+        (when (and binding (symbolp binding))
+          (keymap-set map key
+                      `(menu-item ,(symbol-name binding) ,binding
+                                  :filter ,(apply-partially #'scss2--tree-binding
+                                                            map key))))))))
+
 (defun scss2--setup (dialect)
   "Set up shared editing for DIALECT with exactly one SCSS-grammar parser.
 As in built-in tree-sitter modes, a buffer larger than
@@ -369,7 +393,8 @@ As in built-in tree-sitter modes, a buffer larger than
     (add-hook 'emmet2-mode-hook #'scss2--own-completion nil t)
     (treesit-major-mode-setup)
     (scss2--widen-tree-hooks)
-    (scss2--widen-tree-commands)))
+    (scss2--widen-tree-commands)
+    (scss2--scope-tree-remaps)))
 
 (provide 'scss2)
 ;;; scss2.el ends here
