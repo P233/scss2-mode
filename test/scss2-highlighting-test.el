@@ -172,14 +172,21 @@
       (goto-char (point-min)) (search-forward "@mixin")
       (should (<= (apply #'min starts) (match-beginning 0))))))
 
-(ert-deftest scss2-highlighting-recovery-preserves-unowned-delimiters ()
+(ert-deftest scss2-highlighting-repaired-interpolation-restores-following-selector ()
   (dolist (mode '(scss2-mode css2-mode))
     (scss2-highlighting-test--with-buffer mode ".a{--x:#{m.#{x};x;} a.a{}"
-      ;; SCSS leaves the last dot in ERROR; CSS retains literal raw text.
-      (scss2-highlighting-test--face
-       "} a.a" (if (eq mode 'scss2-mode) 'font-lock-delimiter-face
-                 'font-lock-string-face)
-       3))))
+      ;; Damaged-input colors are unspecified; repaired text must match a fresh buffer.
+      (goto-char (point-min))
+      (search-forward "#{m.#{x};x;")
+      (replace-match "#{1 + 2};" t t)
+      (should-not (treesit-node-check (scss2--root-node) 'has-error))
+      (run-hook-with-args 'pre-redisplay-functions nil)
+      (jit-lock-fontify-now)
+      (scss2-highlighting-test--face "a.a" 'css-selector)
+      (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+        (should (equal (scss2-highlighting-test--faces)
+                       (scss2-highlighting-test--with-buffer mode text
+                         (scss2-highlighting-test--faces))))))))
 
 (provide 'scss2-highlighting-test)
 ;;; scss2-highlighting-test.el ends here

@@ -4,6 +4,8 @@ Edit CSS and SCSS in Emacs with syntax highlighting, context-aware completion, s
 
 **The bundled parser is [P233/tree-sitter-scss](https://github.com/P233/tree-sitter-scss), an independent, unofficial grammar.** It is not affiliated with, or interchangeable with, [tree-sitter-grammars/tree-sitter-scss](https://github.com/tree-sitter-grammars/tree-sitter-scss), and you do not install a grammar separately.
 
+Parsing and highlighting target complete CSS/SCSS files. While code is incomplete, colors and recovery boundaries are best effort, and structural commands may refuse a nearby target. Repairing the syntax restores normal parsing, highlighting and structural editing.
+
 ## Requirements
 
 - **Emacs 31.1+**, built with Tree-sitter support.

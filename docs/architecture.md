@@ -42,6 +42,15 @@ not create a stronger boundary. `vendor/` is an indivisible generated snapshot;
 contracts and full-mode integration. There are no runtime dependencies on `test/`
 or `docs/`.
 
+The bundled parser targets complete input, including text reached by repairing
+an incomplete buffer. Damaged-input tree shape, recovery scope and colors are not
+compatibility guarantees. Context's existing text-based completion fallbacks
+remain host behavior; structural editing still rejects ambiguous tree ranges.
+A damaged construct can therefore prevent editing a following block until it is
+repaired. Integration tests check that repair restores editing, undo/redo and
+the same face spans as a fresh buffer, rather than requiring special parser
+recovery or punctuation captures inside `ERROR` nodes.
+
 The documented commands, major modes, `scss2-completion-at-point` autoload and
 completion category remain stable. Lower-level development uses the explicit
 interfaces above; private `--` helpers are owned by their library.
@@ -245,6 +254,16 @@ tests retain navigation, faces, hooks, dialect lifecycle, Emmet and cross-featur
 contracts. The optional Corfu/YAS suite exercises typing, choosing, host TAB and undo;
 it stubs drawing and is not GUI acceptance.
 
+The 2026-10-05 import of parser `514a38f` replaces snapshot `c53aafa`.
+Consumer runtime Lisp is unchanged. Three tests of retired damaged-input
+recovery were migrated to repair, structural undo/redo and fresh-buffer face
+equivalence; unsafe-range rejection remains covered. Emacs 31.1 validation
+passed 93 core, 3 semantic, 4 Python, 309 source ERT, 309 installed ERT and
+23 Corfu/YAS tests, plus strict byte compilation and the release-manifest check.
+A separate graphical Emacs check loaded both new dialect identities and verified
+selector/property/function/query-feature faces, structural deletion and undo in
+CSS and SCSS files. That check does not measure display latency or popup drawing.
+
 ## Performance model
 
 Tree-sitter owns incremental parsing. Classification traverses relevant ancestors
@@ -273,6 +292,32 @@ Compare byte-compiled copies with the same parser, Emmet, inputs and GC
 settings. Candidate counts, parser counts and face hashes must agree before
 timing is compared. A repeatable material regression requires investigation; a
 cache is not the default remedy.
+
+### Complete-input parser snapshot measurements
+
+The `c53aafa` → `514a38f` snapshot comparison used `scripts/benchmark-emacs.el`
+on an Apple M1 Pro with Emacs 31.1 and the same Emmet checkout. Both isolated
+consumer copies were byte-compiled; runtime Lisp was identical. Three alternating
+process runs per snapshot each used two warmups and three measured repetitions.
+Inputs and final face-span hashes matched across all runs. The following are
+medians of process medians in milliseconds; full fontification follows a forced
+parse, so its column excludes parsing.
+
+| SCSS workload | Parse before → after | Full fontification before → after |
+| --- | ---: | ---: |
+| 72,918-byte stress fixture | 4.354 → 3.926 | 16.356 → 16.609 |
+| 729,189-byte repeated fixture | 43.324 → 36.900 | 233.804 → 229.841 |
+| 131,087-byte numeric fixture | 22.468 → 19.019 | 38.500 → 36.720 |
+| 512 nested query levels | 0.411 → 0.395 | 8.838 → 8.811 |
+| 4,096 query comments | 2.405 → 2.323 | 6.530 → 6.488 |
+
+Parsing the ordinary, repeated and numeric fixtures takes about 10–15% less
+time. Fontification changes are smaller: the stress fixture is 1.5% slower,
+the repeated fixture 1.7% faster and the numeric fixture 4.6% faster. Mode setup
+and numeric edit costs remain small; no general editing-speed gain is claimed.
+These are warm batch phase timings with GC between repetitions and color previews
+disabled, excluding native compilation, file I/O and redisplay. The GUI smoke
+check above establishes functionality, not an end-to-end latency improvement.
 
 ## Narrowing and the shared parser
 
