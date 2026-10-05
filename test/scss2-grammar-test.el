@@ -7,6 +7,9 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'scss2-grammar)
+(require 'scss2-context)
+(require 'scss2-edit)
+(require 'scss2-test-support)
 
 (defun scss2-grammar-test--first-candidate (language)
   "Return the first file Emacs tries to load for LANGUAGE."
@@ -188,6 +191,48 @@
           (with-temp-buffer
             (should (treesit-parser-create (scss2-grammar-ensure 'scss)))))
       (delete-directory user-emacs-directory t))))
+
+(defconst scss2-grammar-test--single-word-node-types
+  '("arguments" "combinator" "configuration" "important" "interpolation" "list" "map"
+    "number" "operator" "parameter" "parameters" "selectors" "spread" "string" "url")
+  "Single-word node types named in Lisp; a scan cannot tell them from keywords.")
+
+(ert-deftest scss2-grammar-libraries-name-only-existing-node-types-and-fields ()
+  ;; A renamed node must fail here instead of silently matching nothing.
+  (let ((language (scss2-grammar-ensure 'scss))
+        (patterns (mapcar (lambda (type) (format "(%s)" type))
+                          scss2-grammar-test--single-word-node-types))
+        (case-fold-search nil))
+    (dolist (file (directory-files (expand-file-name "../.." scss2-grammar-directory) t
+                                   "\\`scss2.*\\.el\\'"))
+      (with-temp-buffer
+        (insert-file-contents file)
+        (while (re-search-forward "\"\\([a-z]+\\(?:_[a-z]+\\)+\\)\"" nil t)
+          (unless (string-prefix-p "tree_sitter_" (match-string 1))
+            (push (format "(%s)" (match-string 1)) patterns)))
+        (goto-char (point-min))
+        (while (re-search-forward "field-name[^\"\n]*\"\\([a-z_]+\\)\"" nil t)
+          (push (format "(_ %s: (_))" (match-string 1)) patterns))))
+    (should (member "(rule_set)" patterns))
+    (should (member "(_ name: (_))" patterns))
+    (should-not (cl-remove-if (lambda (pattern)
+                                (ignore-errors
+                                  (treesit-query-compile language (concat pattern " @node") t)))
+                              (delete-dups patterns)))))
+
+(ert-deftest scss2-grammar-closed-sass-blocks-remain-statements ()
+  ;; Statement and body tables name these types; no compiled query checks them.
+  (dolist (source '("@f│or $i from 1 through 2 { .a { width: $i; } }"
+                    "@wh│ile $i > 0 { .a { width: $i; } }"
+                    "@at-r│oot { .a { width: 1px; } }"
+                    "@key│frames spin { from { opacity: 0; } }"))
+    (scss2-test-with-buffer 'scss2-mode source
+      (let ((statement (buffer-string)))
+        (should-not (treesit-node-check (scss2--root-node) 'has-error))
+        (scss2-duplicate)
+        (should (equal (buffer-string) (concat statement "\n" statement))))))
+  (scss2-test-with-buffer 'scss2-mode ".a { @keyframes spin { op│ } }"
+    (should-not (eq (plist-get (scss2-context-at-point) :role) 'property))))
 
 (ert-deftest scss2-grammar-cold-build-loads-both-dialects-and-warm-cache-reuses ()
   ;; A new Emacs process cannot pass by reusing a language loaded by the suite.
