@@ -180,12 +180,12 @@ future Emmet requests use current source and revision checks.
 
 Semantic tables obey Emacs's literal completion-table protocol. The `scss2` style
 uses Emmet2's shared matcher with the host's escape/Sass identity function,
-leaving original insertion spellings intact. Function acceptance only places point
-inside empty parentheses; no value completion creates snippet fields. TAB uses
-the current parsed declaration to jump directly past its semicolon, including
-from nested calls and snippet fields. Other snippet navigation keys retain their
-own behavior; outside accessible, complete values, TAB retains its existing
-binding. Common annotation text is
+leaving original insertion spellings intact. Function acceptance with status
+`finished` only places point inside empty parentheses; no value completion
+creates snippet fields. TAB uses the current parsed declaration to jump
+directly past its semicolon, including from nested calls and snippet fields.
+Other snippet navigation keys retain their own behavior; outside accessible,
+complete values, TAB retains its existing binding. Common annotation text is
 derived once per table; display callbacks read that same immutable table context.
 Frontends own timing and drawing. Emmet owns
 its own table, render options, preview, stale-candidate validation and atomic
@@ -611,11 +611,13 @@ afterwards, the grammar cannot load until a stylesheet mode is activated again.
 Release packaging requires a clean parser manifest. CI checks out the Emmet2
 commit pinned in `.github/workflows/check.yml`.
 
-Company tests expose one dependency limit: Company's `exact` acceptance status
-does not enter semantic function parentheses; Emmet2 acts only on `finished`
-because Corfu's preview insertion also reports `exact`. Emmet declaration
-choices, Orderless category matching and ordinary Company value selection work
-in batch checks. Batch checks do not cover GUI drawing.
+Corfu is the supported frontend. Accepting a semantic function value such as
+`calc()` differs by frontend: Corfu reports `finished` and point enters the
+parentheses, while Company reports `exact` and point stays after them. Emmet2
+moves point only on `finished` because Corfu's preview insertion also reports
+`exact`; this is a documented frontend difference, not a dependency defect.
+Emmet declaration choices, Orderless category matching and ordinary Company
+value selection work in batch checks. Batch checks do not cover GUI drawing.
 
 `clone-indirect-buffer` copies a buffer's local syntax hooks but not its parser.
 `scss2--extend-to-changed-start` and `scss2--syntax-propertize` therefore read
