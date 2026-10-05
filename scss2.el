@@ -369,13 +369,19 @@ shares, including buffers above `treesit-max-buffer-size'."
 (defun scss2--setup (dialect)
   "Set up shared editing for DIALECT with exactly one SCSS-grammar parser.
 As in built-in tree-sitter modes, a buffer larger than
-`treesit-max-buffer-size' only warns and keeps its base mode."
-  ;; Same check and warning as `treesit-ready-p', which would load the grammar again.
-  (if (> (position-bytes (max (point-min) (1- (point-max))))
-         treesit-max-buffer-size)
-      (display-warning
-       'treesit
-       "Cannot activate tree-sitter, because buffer larger than `treesit-max-buffer-size'")
+`treesit-max-buffer-size' or a grammar that cannot be built or loaded only
+warns and keeps its base mode."
+  (cond
+   ;; Same check and warning as `treesit-ready-p', which would load the grammar again.
+   ((> (position-bytes (max (point-min) (1- (point-max))))
+       treesit-max-buffer-size)
+    (display-warning
+     'treesit
+     "Cannot activate tree-sitter, because buffer larger than `treesit-max-buffer-size'"))
+   ((condition-case failure
+        (ignore (scss2-grammar-ensure dialect))
+      (error (display-warning 'scss2 (error-message-string failure)) t)))
+   (t
     (scss2-syntax-setup dialect)
     (scss2-emmet-setup)
     (add-to-list 'emulation-mode-map-alists 'scss2--tab-map-alist)
@@ -395,7 +401,7 @@ As in built-in tree-sitter modes, a buffer larger than
     (treesit-major-mode-setup)
     (scss2--widen-tree-hooks)
     (scss2--widen-tree-commands)
-    (scss2--scope-tree-remaps)))
+    (scss2--scope-tree-remaps))))
 
 (provide 'scss2)
 ;;; scss2.el ends here

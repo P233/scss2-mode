@@ -111,8 +111,35 @@
                   ((symbol-function 'executable-find) (lambda (_) nil)))
           (let ((failure (should-error (scss2-grammar-ensure 'css) :type 'user-error)))
             (should (string-match-p "install cc or set CC" (error-message-string failure))))
+          (let ((process-environment (cons "CC=missing-cc -m64" process-environment)))
+            (let ((failure (should-error (scss2-grammar-ensure 'css) :type 'user-error)))
+              (should (string-match-p "\"missing-cc -m64\"" (error-message-string failure)))))
           (should-not (file-exists-p (scss2-grammar--library-file))))
       (delete-directory scss2-grammar-cache-directory t))))
+
+(ert-deftest scss2-grammar-compiler-command-runs-outside-the-buffer-directory ()
+  ;; CC is a shell-style command, and a new file's directory may not exist yet.
+  (let* ((directory (make-temp-file "scss2-compiler-command-" t))
+         (compiler (expand-file-name "fixture cc" directory))
+         (library (expand-file-name "cache/libscss2-test.so" directory))
+         (default-directory (expand-file-name "missing/" directory))
+         (process-environment
+          (cons (concat "CC=" (shell-quote-argument compiler) " -m64") process-environment)))
+    (unwind-protect
+        (progn
+          (write-region (concat "#!/bin/sh\n"
+                                "printf '%s\\n' \"$1\" > \"$(dirname \"$0\")/first-argument\"\n"
+                                "while [ \"$1\" != -o ]; do shift; done\n"
+                                "printf native > \"$2\"\n")
+                        nil compiler nil 'silent)
+          (set-file-modes compiler #o755)
+          (scss2-grammar--compile library)
+          (should (scss2-grammar--library-present-p library))
+          (should (equal (with-temp-buffer
+                           (insert-file-contents (expand-file-name "first-argument" directory))
+                           (buffer-string))
+                         "-m64\n")))
+      (delete-directory directory t))))
 
 (ert-deftest scss2-grammar-verifies-each-library-once-until-rebuilt ()
   (let ((scss2-grammar-cache-directory (make-temp-file "scss2-verify-" t))

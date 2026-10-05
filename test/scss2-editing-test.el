@@ -73,12 +73,30 @@
     (should (memq 'font-lock-constant-face (scss2-editing-test--faces "#ff0000")))))
 
 (ert-deftest scss2-editing-reports-unavailable-grammar ()
-  (with-temp-buffer
-    (cl-letf (((symbol-function 'scss2-grammar-ensure)
-               (lambda (&rest _) (user-error "SCSS parser build failed"))))
-      (let ((failure (should-error (scss2-mode) :type 'user-error)))
-        (should (string-match-p "SCSS parser build failed" (error-message-string failure)))))
-    (should-not (treesit-parser-list))))
+  ;; Like an oversized buffer, the file keeps its base mode and mode hooks.
+  (pcase-dolist (`(,mode . ,base) '((css2-mode . css-mode) (scss2-mode . scss-mode)))
+    (dolist (failure '((user-error "SCSS parser build failed")
+                       (file-error "Creating directory" "Permission denied" "/cache")))
+      (with-temp-buffer
+        (insert ".a { color: red; }")
+        (let ((hook (intern (format "%s-hook" mode)))
+              (base-defaults (with-temp-buffer (funcall base) font-lock-defaults))
+              warnings ran)
+          (cl-letf (((symbol-function 'scss2-grammar-ensure)
+                     (lambda (&rest _) (signal (car failure) (cdr failure))))
+                    ((symbol-function 'display-warning)
+                     (lambda (type message &rest _) (push (list type message) warnings)))
+                    ((symbol-value hook) (list (lambda () (setq ran t)))))
+            (funcall mode))
+          (should (equal warnings
+                         (list (list 'scss2 (error-message-string failure)))))
+          (should ran)
+          (should (eq major-mode mode))
+          (should-not scss2-dialect)
+          (should-not (treesit-parser-list))
+          (should (equal font-lock-defaults base-defaults))
+          (should (memq #'css-completion-at-point completion-at-point-functions))
+          (should-not (memq #'scss2-completion-at-point completion-at-point-functions)))))))
 
 (ert-deftest scss2-editing-interpolation-overrides-enclosing-faces ()
   (scss2-editing-test--with-buffer

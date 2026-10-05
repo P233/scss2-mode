@@ -40,8 +40,8 @@
   (expand-file-name "tree-sitter/scss2-mode/" user-emacs-directory)
   "Root directory for native libraries built from the bundled grammar.
 Each source identity and platform has its own subdirectory.  The package
-directory can be read-only.  Compilation uses the CC environment variable
-as one executable name, or cc when CC is unset."
+directory can be read-only.  Compilation runs the CC environment variable,
+split like a shell command such as \"ccache cc\", or cc when CC is unset."
   :type 'directory
   :group 'scss2)
 
@@ -97,11 +97,15 @@ SCSS grammars or a different version of this package."
 
 (defun scss2-grammar--compile (library)
   "Build bundled sources and atomically publish LIBRARY on success."
-  (let* ((compiler-name (or (getenv "CC") "cc"))
-         (compiler (executable-find compiler-name))
-         (source (expand-file-name "src/" scss2-grammar-directory)))
+  (let* ((command (or (getenv "CC") "cc"))
+         (words (split-string-shell-command command))
+         (compiler (and words (executable-find (car words))))
+         (source (expand-file-name "src/" scss2-grammar-directory))
+         ;; The visiting buffer's directory may not exist yet.
+         (default-directory (file-name-directory library)))
     (unless compiler
-      (user-error "scss2-mode needs a C compiler; install cc or set CC to its executable"))
+      (user-error "scss2-mode needs a C compiler; cannot find %S; install cc or set CC"
+                  command))
     (make-directory (file-name-directory library) t)
     (let ((temporary (make-temp-file
                       (expand-file-name ".compile-" (file-name-directory library))
@@ -112,13 +116,14 @@ SCSS grammars or a different version of this package."
           (with-temp-buffer
             (let ((status
                    (condition-case failure
-                       (call-process compiler nil t nil
-                                     "-std=c11" "-O2" "-fPIC"
-                                     (if (eq system-type 'darwin) "-dynamiclib" "-shared")
-                                     "-I" source
-                                     (expand-file-name "parser.c" source)
-                                     (expand-file-name "scanner.c" source)
-                                     "-o" temporary)
+                       (apply #'call-process compiler nil t nil
+                              (append (cdr words)
+                                      (list "-std=c11" "-O2" "-fPIC"
+                                            (if (eq system-type 'darwin) "-dynamiclib" "-shared")
+                                            "-I" source
+                                            (expand-file-name "parser.c" source)
+                                            (expand-file-name "scanner.c" source)
+                                            "-o" temporary)))
                      (file-error
                       (user-error "Could not run the scss2-mode compiler: %s"
                                   (error-message-string failure))))))

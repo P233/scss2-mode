@@ -219,7 +219,9 @@
   (with-temp-buffer
     (cl-letf (((symbol-function 'emmet2-expand-analysis) nil))
       (should-error (scss2-emmet-setup) :type 'error)
-      (should-not (local-variable-p 'emmet2-context-provider)))))
+      (should-not (local-variable-p 'emmet2-context-provider))
+      ;; Unlike an unavailable grammar, a mismatched installation never degrades.
+      (should-error (scss2-mode) :type 'error))))
 
 (ert-deftest scss2-emmet-declines-without-its-host-provider ()
   (with-temp-buffer

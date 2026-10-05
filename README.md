@@ -90,6 +90,8 @@ intervals. The option reduces highlighting memory, not the syntax tree's memory.
 
 Like built-in tree-sitter modes, both modes follow `treesit-max-buffer-size`: a
 larger buffer shows a warning and keeps plain `scss-mode` or `css-mode` behavior.
+The same happens when the parser cannot be compiled or loaded, for example
+without a C compiler: the warning gives the reason, and your mode hooks still run.
 The syntax tree takes tens of bytes per source byte, more for minified or
 generated CSS, so lower that limit if you open very large generated CSS.
 
@@ -163,7 +165,7 @@ Each edit is atomic. Failed edits restore text, point, selection, and the kill r
 | `css-fontify-colors` | Control CSS color previews |
 | `scss2-grammar-cache-directory` | Choose where locally compiled parser libraries are stored |
 
-The parser cache defaults to `user-emacs-directory/tree-sitter/scss2-mode/`. Set the `CC` environment variable if Emacs should use a compiler other than `cc`; its value must name an executable, without compiler flags. Once installed and built, editing works offline without Node, Deno, or a background service.
+The parser cache defaults to `user-emacs-directory/tree-sitter/scss2-mode/`. Set the `CC` environment variable if Emacs should use a compiler other than `cc`; it is split like a shell command, so values such as `ccache cc` or `cc -m64` work and a path containing spaces must be quoted. Once installed and built, editing works offline without Node, Deno, or a background service.
 
 ## Current limits
 

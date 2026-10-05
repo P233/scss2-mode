@@ -59,10 +59,16 @@ interfaces above; private `--` helpers are owned by their library.
    [Narrowing and the shared parser](#narrowing-and-the-shared-parser)).
    A syntax-only client can stop after step 2.
 
-Like built-in tree-sitter modes, full mode composition checks
-`treesit-max-buffer-size` before step 2: a larger buffer skips steps 2-3 and
-keeps its base mode with the standard `treesit` warning. `scss2-syntax-setup`
-has no size check; syntax-only clients own that policy.
+Like built-in tree-sitter modes, full mode composition checks readiness before
+step 2. A buffer larger than `treesit-max-buffer-size` gets the standard
+`treesit` warning; a grammar that cannot be built or loaded (no C compiler, an
+Emacs without tree-sitter, an unwritable cache) gets an `scss2` warning with
+the build error. Either way the buffer skips steps 2-3, keeps its base mode with
+`scss2-dialect` nil and still runs its mode hooks, so globalized minor modes
+such as Font Lock turn on. `scss2-syntax-setup` makes neither check and
+signals; syntax-only clients own that policy. A missing Emmet2 host API still
+signals: it means a mismatched source installation, not an environment to
+degrade in.
 
 Keymaps are shared by every buffer of a mode, so buffer state must not be
 written into them unconditionally. `treesit-major-mode-setup` does exactly that:
