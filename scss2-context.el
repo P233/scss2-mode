@@ -208,26 +208,26 @@ token, and an unfinished reference leaves an identifier ending at the dot."
 
 (defun scss2-context--custom-property-reference-p (node beginning)
   "Whether NODE at BEGINNING is the direct first argument of CSS var().
-Use the call's static name and argument boundaries.  Raw values and parser
-recovery lack call nodes, so retain their simple unqualified var() spelling."
+Use the call's static name and argument boundaries when the tree confirms
+them.  Otherwise, as in raw values, parser recovery or before a missing `)',
+accept the simple unqualified var() spelling of the text."
   (when (string-prefix-p "--" (scss2--decode-identifier
                                (buffer-substring-no-properties beginning (point))))
     (let* ((arguments (scss2-context--containing node '("arguments")))
            (call (and arguments (treesit-node-parent arguments))))
-      (if arguments
-          (let ((first (cl-find-if
-                        (lambda (child)
-                          (not (member (treesit-node-type child) '("(" "block_comment" "inline_comment"))))
-                        (scss2--children arguments))))
-            (and (equal (treesit-node-type call) "call_expression")
-                 (treesit-node-eq arguments (treesit-node-child-by-field-name call "arguments"))
-                 (equal (downcase (or (scss2--identifier-name
-                                      (treesit-node-child-by-field-name call "name")) "")) "var")
-                 (not (treesit-node-child-by-field-name call "module"))
-                 first (equal (treesit-node-type first) "plain_value")
-                 (= (treesit-node-start first) beginning)
-                 (<= (point) (treesit-node-end first))))
-        (when (scss2--ancestor node '("raw_value" "ERROR"))
+      (or (when arguments
+            (let ((first (cl-find-if
+                          (lambda (child)
+                            (not (member (treesit-node-type child) '("(" "block_comment" "inline_comment"))))
+                          (scss2--children arguments))))
+              (and (equal (treesit-node-type call) "call_expression")
+                   (treesit-node-eq arguments (treesit-node-child-by-field-name call "arguments"))
+                   (equal (downcase (or (scss2--identifier-name
+                                        (treesit-node-child-by-field-name call "name")) "")) "var")
+                   (not (treesit-node-child-by-field-name call "module"))
+                   first (equal (treesit-node-type first) "plain_value")
+                   (= (treesit-node-start first) beginning)
+                   (<= (point) (treesit-node-end first)))))
           (save-excursion
             (when-let* ((opening (nth 1 (syntax-ppss beginning)))
                         (_ (eq (char-after opening) ?\()))
@@ -238,7 +238,7 @@ recovery lack call nodes, so retain their simple unqualified var() spelling."
                 (goto-char (1+ opening))
                 (condition-case nil
                     (progn (forward-comment (point-max)) (= (point) beginning))
-                  (scan-error nil))))))))))
+                  (scan-error nil)))))))))
 
 (defun scss2-context--identifier-bounds (node)
   "Return complete identifier bounds at point, including an ending token.
@@ -282,10 +282,16 @@ non-ASCII names."
 
 (defun scss2-context--declaration-context (node beginning ending &optional media)
   "Describe the name or value of declaration NODE at BEGINNING and ENDING.
-MEDIA selects feature candidates instead of CSS property candidates."
+MEDIA selects feature candidates instead of CSS property candidates.
+Read the colon after the name from the text: recovery can attach the next
+statement's colon to an unfinished value."
   (let* ((name (treesit-node-child-by-field-name node "name"))
-         (colon (scss2--child node ":"))
-         (value (and colon (<= (treesit-node-end colon) (point))))
+         (value (and name
+                     (let ((position (point)))
+                       (save-excursion
+                         (goto-char (treesit-node-end name))
+                         (forward-comment (point-max))
+                         (and (eq (char-after) ?:) (< (point) position))))))
          (property (scss2--identifier-name name)))
     (scss2-context--context
      (if value (if media 'media-value 'property-value)
@@ -356,6 +362,11 @@ BEGINNING and ENDING bound the identifier being completed."
              beginning ending
              :property (and name (scss2--identifier-name name))
              :query language)))
+         ;; An unclosed group recovers as an ERROR prelude; the statement text decides.
+         ((and (equal (treesit-node-type query) "query_statement")
+               (when-let* ((opening (nth 1 (syntax-ppss))))
+                 (and (eq (char-after opening) ?\() (> opening (treesit-node-start query)))))
+          nil)
          (t (scss2-context--context 'media-keyword beginning ending
                                     :query language)))))))
 
@@ -484,7 +495,8 @@ recognized selector, literal or declaration owns its complete syntax."
            (concat "\\`@" (if sass "\\(?:mixin\\|function\\)" "function")
                    "\\_>[^{;]*([^()]*:[^,()]*\\'") prefix))
       (scss2-context--context 'property-value beginning ending))
-     ((and owner (not selector)
+     ;; A Sass statement starting with `$' is a variable declaration, even at top level.
+     ((and (or owner (and sass (string-prefix-p "$" prefix))) (not selector)
            (string-match "\\`\\([[:alnum:]_$-]+\\)[ \t]*:[ \t\n]*" prefix))
       (let ((property (match-string 1 prefix)))
         (unless (and (string-prefix-p "$" property) (not sass))

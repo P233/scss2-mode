@@ -168,7 +168,7 @@ The parser cache defaults to `user-emacs-directory/tree-sitter/scss2-mode/`. Set
 ## Current limits
 
 - Module completion reads unsaved edits in open local `@use` files. It does not follow `@forward` re-exports, package/load-path importers, or a complete built-in module catalog.
-- Completion has known edge cases with existing call/argument delimiters, import-path replacement, nested Sass contexts, and matching during an active session.
+- Completion has known edge cases with existing call/argument delimiters, a few unclosed ones (an escaped `v\61 r(`, `var(` inside unclosed `@include` arguments, an unclosed group followed by another media condition), import-path replacement, nested Sass contexts, and matching during an active session.
 - If you clear `completion-category-defaults` or override the `scss2` category, your own styles match raw spellings: escaped queries such as `i\62` and Sass `_`/`-` equivalence then find nothing.
 - Escaped keywords are treated as ordinary names, and some advanced CSS syntax, such as typed `attr()` unions, remains incomplete. Highlighting alone does not establish a safe structural edit range.
 - Large symbol tables and deeply nested queries can affect responsiveness. Batch checks do not measure GUI input latency.

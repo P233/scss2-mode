@@ -14,7 +14,16 @@
                   ("@media (prefers-co│) {}" media-feature "prefers-co")
                   (".a { color: var(--to│); }" custom-property "color")
                   ("@import 'the│';" path nil)
-                  (".a { --raw: { nested: x│ }; }" property-value "--raw")))
+                  (".a { --raw: { nested: x│ }; }" property-value "--raw")
+                  (".a { color /* x */: re│d; }" property-value "color")
+                  ;; Without auto-pairing, unclosed calls and groups are the typing state.
+                  (".a { color: var(--to│; }" custom-property "color")
+                  (".a {\n  color: var(--to│\n  top: 0;\n}" custom-property "color")
+                  (".a {\n  left: anchor(le│\n  top: 0;\n}" property-value "left")
+                  ("@media (max-w│ {\n}" media-feature nil)
+                  ("@media screen and (max-w│ {\n}" media-feature nil)
+                  ("@media (prefers-color-scheme: │ {\n}" media-value "prefers-color-scheme")
+                  ("@supports not (display: │ {\n}" property-value "display")))
     (dolist (mode '(css2-mode scss2-mode))
       (scss2-test-with-buffer mode (car case)
         (let ((context (scss2-context-at-point)))
@@ -27,7 +36,38 @@
   (scss2-test-with-buffer 'css2-mode ".a { content: \"#{$to│}\"; }"
     (should-not (scss2-context-at-point)))
   (scss2-test-with-buffer 'scss2-mode "@mixin m($tone) { @include pa│; }"
-    (should (eq (plist-get (scss2-context-at-point) :role) 'mixin))))
+    (should (eq (plist-get (scss2-context-at-point) :role) 'mixin)))
+  ;; A top-level variable declaration needs no block to own its value.
+  (dolist (case '(("$t: var(--to│\n.a {}" custom-property "$t")
+                  ("$t: rhythm(3│\n.a {}" property-value "$t")
+                  ("│\n.a {}" selector nil)
+                  ("$│" variable nil)))
+    (scss2-test-with-buffer 'scss2-mode (car case)
+      (let ((context (scss2-context-at-point)))
+        (should (eq (plist-get context :role) (cadr case)))
+        (should (equal (plist-get context :property) (nth 2 case)))))))
+
+(ert-deftest scss2-context-unclosed-var-after-a-declaration-expansion ()
+  ;; Emmet leaves `prop: ;' with point before the semicolon.
+  (dolist (mode '(css2-mode scss2-mode))
+    (scss2-test-with-buffer mode ".a {\n  background: │;\n}"
+      (dolist (char (string-to-list "var(--x"))
+        (insert char)
+        (let ((context (scss2-context-at-point)))
+          (should (eq (plist-get context :role)
+                      (if (looking-back "(--x?" (line-beginning-position))
+                          'custom-property 'property-value)))
+          (should (equal (plist-get context :property) "background")))))))
+
+(ert-deftest scss2-context-query-groups-without-statement-text-recovery ()
+  ;; Only @media, @container and @supports headers have statement-text recovery.
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (case '(("@import url(a.css) screen and (max-width:│;" pseudo)
+                    ("@import url(│ {" nil)))
+      (scss2-test-with-buffer mode (car case)
+        (should (eq (plist-get (scss2-context-at-point) :role) (cadr case))))))
+  (scss2-test-with-buffer 'scss2-mode ".a { padding: if(sass(tr│ue): 1px); }"
+    (should (eq (plist-get (scss2-context-at-point) :role) 'media-keyword))))
 
 (ert-deftest scss2-context-font-lock-dont-widen-reads-the-restriction ()
   ;; Host text outside a code block's restriction is not stylesheet syntax.

@@ -128,7 +128,14 @@ not force GC; freed allocations can remain resident in Emacs's allocator.
 `scss2-context-at-point` first excludes opaque comments and strings, then applies
 one ordered classifier. Recognized literals, names, selectors, queries and
 declarations precede text recovery for unfinished statements. Order is language
-behavior. The result contains accessible replacement bounds, a role and only the
+behavior. A recovered tree shape decides a role only when it confirms that role.
+Without auto-pairing an unclosed `(` is the ordinary typing state, and recovery
+can attach the next statement's tokens to it, so the classifier reads the colon
+after a declaration name from the text, accepts an unqualified `var(` first
+argument from the text, defers an unclosed group in a query statement to the
+`@media`/`@container`/`@supports` statement-text recovery, and treats a Sass
+statement starting with `$` as a variable declaration even outside a block. The
+result contains accessible replacement bounds, a role and only the
 facts consumers need (`:property`, `:owner`, `:module`, `:mixin`, `:query`, `:start`).
 No intermediate rule object or context cache is retained.
 
