@@ -101,7 +101,9 @@ Nested lists in :nth-child(... of ...) belong to the enclosing branch."
 (defun scss2--sequence-p (node)
   "Whether NODE's direct children form a sequence of independent items."
   (let ((type (treesit-node-type node)))
-    (or (member type scss2--list-types)
+    (or (and (member type scss2--list-types)
+             ;; The grammar spells an @at-root query as a map; it is a header.
+             (not (equal (treesit-node-type (treesit-node-parent node)) "at_root_statement")))
         (member type scss2--declaration-types)
         (and (equal type "selectors")
              (treesit-node-eq node (scss2--selector-owner node))))))
@@ -111,9 +113,9 @@ Nested lists in :nth-child(... of ...) belong to the enclosing branch."
 A declaration's sequence is its value field, so its name, flags and block
 are never items.  Delimiters and comments are not members either."
   (if (member (treesit-node-type sequence) scss2--declaration-types)
-      (cl-remove-if-not
-       (lambda (child) (equal (treesit-node-field-name child) "value"))
-       (scss2--children sequence))
+      (cl-loop for index below (treesit-node-child-count sequence)
+               when (equal (treesit-node-field-name-for-child sequence index) "value")
+               collect (treesit-node-child sequence index))
     (cl-remove-if
      (lambda (child)
        (or (scss2--comment-p child)
@@ -369,7 +371,7 @@ delegate to the existing TAB binding, including completion and snippet fields."
     (let* ((children (scss2--children node))
            (opening (cl-find-if
                      (lambda (child)
-                       (or (member (treesit-node-type child) '("(" "[" "{" "\"" "'" "/*"))
+                       (or (member (treesit-node-type child) '("(" "[" "{" "#{" "\"" "'" "/*"))
                            (and (equal (treesit-node-type node) "raw_group")
                                 (equal (treesit-node-type child) "raw_text")
                                 (equal (treesit-node-text child t) "#{"))))
@@ -590,6 +592,8 @@ Only REPLACEMENT's characters are inserted, never its text properties."
     (unless separator (user-error "This target cannot be duplicated in its context"))
     (when (equal type "else_clause")
       (user-error "Duplicate the entire conditional instead of an else clause"))
+    (when (equal (treesit-node-type (scss2--target-subject target)) "raw_value")
+      (user-error "A raw value has no separable items; duplicate its declaration instead"))
     (scss2--transaction
       (goto-char (scss2--target-end target))
       (insert
@@ -625,13 +629,22 @@ Only REPLACEMENT's characters are inserted, never its text properties."
 
 ;;;###autoload
 (defun scss2-zap ()
-  "Delete from point to the target content's end without changing the kill ring."
+  "Delete from point to the target content's end without changing the kill ring.
+A delimited construct around point inside that content keeps its closer."
   (interactive)
   (let* ((target (scss2--resolve-target 'content))
-         (bounds (scss2--content-bounds target)))
-    (unless (and bounds (<= (car bounds) (point) (cdr bounds)))
+         (bounds (scss2--content-bounds target))
+         (end (cdr bounds)))
+    (unless (and bounds (<= (car bounds) (point) end))
       (user-error "Point is outside this target's editable content"))
-    (scss2--transaction (delete-region (point) (cdr bounds)))))
+    (scss2--with-font-lock-view
+      (let ((node (scss2--node-at-point)))
+        (while (and node (<= (car bounds) (treesit-node-start node)))
+          (when-let* ((interior (scss2--interior node))
+                      (_ (<= (car interior) (point) (cdr interior))))
+            (setq end (min end (cdr interior))))
+          (setq node (treesit-node-parent node)))))
+    (scss2--transaction (delete-region (point) end))))
 
 ;;;###autoload
 (defun scss2-kill-block ()

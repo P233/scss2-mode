@@ -585,9 +585,12 @@ release eligibility, the registration test, the notifier assertion in
 The dialect parser cache, transactional guards, direct local module support and
 specialized identifier semantics serve current contracts. Dispatch is explicit,
 and the core and semantic suites run independently. Structural edits keep
-tokens when deleting comments, protect the required first CSS `var()` argument
-and keep CRLF when duplicating statements; completion finishes unfinished loop
-ranges, variable values and loop bindings.
+tokens when deleting comments, also at a restriction's edge, protect the required
+first CSS `var()` argument, keep CRLF when duplicating statements, stop
+`scss2-zap` at the closer of the innermost delimited construct around point,
+refuse to duplicate a raw custom-property value and treat an `@at-root` query as
+its statement's header; completion finishes unfinished loop ranges, variable
+values and loop bindings.
 
 The grammar cache rejects empty or missing compiler output before publishing it
 and rebuilds existing empty caches. Release packaging requires a clean parser

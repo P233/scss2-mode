@@ -391,6 +391,52 @@
       (scss2-edit-test--unchanged #'scss2-empty)
       (scss2-edit-test--unchanged #'scss2-zap))))
 
+(defun scss2-edit-test--interiors ()
+  "Return (OPEN-END . CLOSE-START) for each delimited node in the buffer."
+  (let (interiors)
+    (dolist (capture (treesit-query-capture (scss2--root-node) '((_) @node)))
+      (let* ((children (scss2--children (cdr capture)))
+             (opener (cl-find-if (lambda (child)
+                                   (member (treesit-node-text child t) '("(" "[" "{" "#{" "\"" "'" "/*")))
+                                 children))
+             (closer (car (last children))))
+        (when (and opener (member (treesit-node-text closer t) '(")" "]" "}" "\"" "'" "*/")))
+          (push (cons (treesit-node-end opener) (treesit-node-start closer)) interiors))))
+    interiors))
+
+(ert-deftest scss2-edit-zap-keeps-the-closers-of-nested-constructs ()
+  (dolist (case '((css2-mode ".a { --x: var(│--y); }" ".a { --x: var(); }")
+                  (css2-mode ".a { --x: var(--y│); }" ".a { --x: var(--y); }")
+                  (css2-mode ".a { mask: url(\"│data:x\"); }" ".a { mask: url(\"\"); }")
+                  (scss2-mode ".a { width: calc(#{│f(2)} - 2px); }" ".a { width: calc(#{} - 2px); }")
+                  (scss2-mode ".a { content: \"x #{f(\"│y\")} z\"; }"
+                              ".a { content: \"x #{f(\"\")} z\"; }")))
+    (scss2-edit-test--buffer (car case) (cadr case)
+      (let ((position (point)))
+        (scss2-zap)
+        (should (equal (buffer-string) (nth 2 case)))
+        (should (= (point) position)))))
+  ;; At every position, deletion stops at the innermost interior around point.
+  (dolist (case '((css2-mode ".a { --x: var(--bg, rgb(0 0 0 / 50%)); --s: \"ab\" oklch(from var(--b) l c h); mask: url(\"data:x\"); width: calc(1px + (2px * 3)); color: if(style(--x): red; else: blue); --c: a /* b */ c; }\n")
+                  (scss2-mode ".a { width: calc(#{f(2)} - 2px); content: \"x #{f(\"y\")} z\"; --z: var(--y, [a]); }\n$v: \"a #{$b} c\" + fn((1 2), [3]);\n")))
+    (with-temp-buffer
+      (let ((source (cadr case)) (css-fontify-colors nil) (zaps 0)
+            (interprogram-cut-function nil) (interprogram-paste-function nil))
+        (insert source)
+        (scss2-test-setup-buffer (car case))
+        (buffer-disable-undo)
+        (let ((interiors (scss2-edit-test--interiors)))
+          (dotimes (offset (1+ (length source)))
+            (erase-buffer) (insert source) (goto-char (1+ offset))
+            (when (condition-case nil (progn (scss2-zap) t) (user-error nil))
+              (let ((end (+ (point) (- (length source) (buffer-size)))))
+                (cl-incf zaps)
+                (ert-info ((format "zap at %d gave %S" (point) (buffer-string)))
+                  (should-not (cl-find-if (pcase-lambda (`(,open . ,close))
+                                            (and (<= open (point) close) (< close end)))
+                                          interiors)))))))
+        (should (> zaps 50))))))
+
 (ert-deftest scss2-edit-values-respect-spaces-commas-and-nested-literals ()
   (dolist (mode '(css2-mode scss2-mode))
     (scss2-edit-test--buffer mode ".a { margin: 1px │2px 3px; }"
@@ -443,7 +489,8 @@
                       "@supports selector(.a, .│b) { .a { color: red; } }"
                       "@media scr│een, print { .a { color: red; } }"
                       "@supports /* co│mment */ (display: grid) { .a {} }"
-                      "@import \"the│me.css\" screen;"))
+                      "@import \"the│me.css\" screen;"
+                      "@at-root (wi│th: rule) { color: red; }"))
       (scss2-edit-test--buffer mode source
         (should-not (treesit-node-check (scss2--root-node) 'has-error))
         (scss2-edit-test--unchanged #'scss2-kill-value-item)
@@ -565,6 +612,16 @@
     (let ((source (buffer-string)))
       (scss2-duplicate)
       (should (equal (buffer-string) (concat source "\n" source))))))
+
+(ert-deftest scss2-edit-duplicate-refuses-raw-values ()
+  ;; A copy would merge into the same opaque raw value instead of adding an item.
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (source '(".a { --x: a, │b; }" ".a { --shadow: 0 1px red, 0 2px │blue; }"))
+      (scss2-edit-test--buffer mode source
+        (scss2-edit-test--unchanged #'scss2-duplicate)))
+    (scss2-edit-test--buffer mode ".a { --│x: a, b; }"
+      (scss2-duplicate)
+      (should (equal (buffer-string) ".a { --x: a, b;\n--x: a, b; }")))))
 
 (ert-deftest scss2-edit-duplicate-separates-final-sass-statements ()
   (dolist (case '((".a { @include pa│int }" ".a { @include paint;\n@include paint }")
@@ -1079,7 +1136,7 @@
   ;; Whole-target commands never turn a valid stylesheet into an invalid one.
   (dolist (case '((css2-mode ".a, .b:is(.c, [d=\"e\"]) {\n  margin: 0 auto !important;\n  font: 1px/2 a, \"b, c\";\n  x: rgba(0, 0, 0, 0.5) url(\"u.png\");\n}\n@media screen and (width > 1px) { .e { color: red; } }\n")
                   (scss2-mode "@use 'x' with ($only: 1);\n$o: (a,);\n$l: [a, b,];\n.f {\n  font: {\n    family: x;\n    size: 12px;\n  }\n  transition:\n    opacity 1s,\n    transform 2s;\n}\n")
-                  (scss2-mode "@use 'theme' as t;\n$m: (a: 1, 'b': 2, c: (d e f));\n@mixin f($a: 1, $b: 'x') { @content; }\n.a {\n  @include f($a: 2, $b: t.$tone) using ($s) { x: $s; }\n  &:hover, .b { y: 1px 2px !important; }\n  @if $m { z: 1; } @else { z: 2; }\n}\n")))
+                  (scss2-mode "@use 'theme' as t;\n$m: (a: 1, 'b': 2, c: (d e f));\n@mixin f($a: 1, $b: 'x') { @content; }\n.a {\n  @include f($a: 2, $b: t.$tone) using ($s) { x: $s; }\n  &:hover, .b { y: 1px 2px !important; }\n  @if $m { z: 1; } @else { z: 2; }\n  @at-root (without: media) { w: 1; }\n}\n")))
     (dolist (command '(scss2-kill scss2-kill-value-item scss2-kill-selector
                        scss2-kill-property scss2-kill-block scss2-duplicate))
       (with-temp-buffer
@@ -1095,6 +1152,19 @@
             (when (condition-case nil (progn (funcall command) t) (user-error nil))
               (ert-info ((format "%s at %d gave %S" command (1+ offset) (buffer-string)))
                 (should-not (treesit-node-check (scss2--root-node) 'has-error))))))))))
+
+(ert-deftest scss2-edit-long-values-never-look-up-field-names-per-child ()
+  ;; A child's own field-name lookup walks all of its previous siblings.
+  (let ((items (mapcar (lambda (index) (format "%dpx 0 #000" index)) (number-sequence 1 500))))
+    (setf (nth 250 items) (concat "│" (nth 250 items)))
+    (dolist (mode '(css2-mode scss2-mode))
+      (scss2-edit-test--buffer mode (concat ".a { box-shadow: " (string-join items ", ") "; }")
+        (let ((lookup (symbol-function 'treesit-node-field-name)) (calls 0))
+          (cl-letf (((symbol-function 'treesit-node-field-name)
+                     (lambda (&rest args) (cl-incf calls) (apply lookup args))))
+            (scss2-copy))
+          (should (equal (car kill-ring) "251px 0 #000"))
+          (should (zerop calls)))))))
 
 (provide 'scss2-edit-test)
 ;;; scss2-edit-test.el ends here

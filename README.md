@@ -147,7 +147,7 @@ Optional example; choose any keys you prefer:
 
 A target is a whole statement or one item of a sequence: a value, argument, parameter, map entry, or selector branch. A quoted key or value belongs to its entry, and `!important` and Sass flags stay with their declaration. Point must touch the target: blank space, a comma, or a flag selects nothing, while a name or delimiter stands for its owner. A target that fills whole lines takes those lines with it.
 
-Block deletion includes dependent `else` branches. A rule keeps its last selector, a variable its only value, and a `with` clause its only variable; remove the whole statement, or clear the value with `scss2-empty-value`. Arithmetic operands stay together, and strings, URLs, and raw custom-property values retain their boundaries.
+Block deletion includes dependent `else` branches. A rule keeps its last selector, a variable its only value, and a `with` clause its only variable; remove the whole statement, or clear the value with `scss2-empty-value`. Arithmetic operands stay together, and strings, URLs, and raw custom-property values retain their boundaries. `scss2-zap` stops at the closer of the innermost delimited construct around point, so zapping inside `var(--y)` leaves `var()`. A raw custom-property value is one item; duplicate its declaration instead. An `@at-root` query belongs to its statement, like an `@media` query.
 
 Deleting a comment preserves adjacent value tokens. The first argument of CSS `var()` cannot be removed; remove the whole call instead. Statement duplication follows the surrounding line ending, including literal CRLF.
 
