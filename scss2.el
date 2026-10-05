@@ -160,7 +160,6 @@ Emmet's minor-mode hook can run after the major mode.  Keep its explicit
 commands while removing its overlapping automatic completion provider."
   (remove-hook 'completion-at-point-functions #'css-completion-at-point t)
   (remove-hook 'completion-at-point-functions 'emmet2-capf t)
-  (remove-hook 'completion-at-point-functions 'emmet2-css-value-capf t)
   (add-hook 'completion-at-point-functions #'scss2-completion-at-point -90 t))
 
 ;; INTERIM (since 2026-10-03, until treesit.el reads its redisplay and syntax hooks

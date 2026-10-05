@@ -232,7 +232,7 @@ SCSS2_EMMET2_DIR=/path/to/emmet2-mode make check
 
 Do not patch generated vendor files independently. The manifest records imported content, including uncommitted changes. Releases should use a committed snapshot and an installable emmet2-mode dependency.
 
-CI targets Emacs 31.1 on Linux and macOS. Set the GitHub repository variable `SCSS2_EMMET2_REVISION` to the full 40-character commit SHA of a published compatible Emmet2 checkout containing `emmet2-completion.el` and `emmet2-css-value.el`. CI fails before setup if that pin is absent. Passing local checks does not imply passing hosted CI.
+CI targets Emacs 31.1 on Linux and macOS and checks out the Emmet2 commit pinned in `.github/workflows/check.yml`; advance that pin in the same commit that starts depending on newer Emmet2 code. Passing local checks does not imply passing hosted CI.
 
 </details>
 

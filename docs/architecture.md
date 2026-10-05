@@ -32,7 +32,7 @@ flowchart TD
 | `scss2-context` | `scss2-context-at-point` returns role, bounds and role-specific facts | Request-local reads only; no catalog, module I/O, host or Emmet dependency |
 | `scss2-completion` | `scss2-completion-for-context` consumes explicit context plus the current parsed buffer; supplies candidates and name identity to `emmet2-completion-capf` | Tables are session-local; no classifier, host mode or Emmet adapter dependency |
 | `scss2-edit` | Public structural commands and syntax-based TAB navigation | Targets live for one command; no context, completion or required frontend dependency |
-| `scss2-emmet` | Context provider, explicit expansion and abbreviation CAPF; requests host field navigation | One synchronous context binding; external Emmet owns live choices, revisions and insertion |
+| `scss2-emmet` | Context provider, explicit expansion and abbreviation CAPF | One synchronous context binding; external Emmet owns live choices, revisions and insertion, which adds no snippet fields to CSS |
 | `scss2` | `scss2-completion-at-point` selects the provider; mode setup, font lock and navigation | Composition owns hook registration; semantic libraries never call back into it |
 
 Root Lisp files are Emacs load-path libraries. Their separation follows these

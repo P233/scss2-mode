@@ -440,7 +440,13 @@ COMMANDS default to the bindings of C-M-a and C-M-e."
     (run-hooks 'emmet2-mode-hook)
     (should-not (memq 'emmet2-capf completion-at-point-functions))
     (should-not (memq 'css-completion-at-point completion-at-point-functions))
-    (should (= (cl-count 'scss2-completion-at-point completion-at-point-functions) 1))))
+    (should (= (cl-count 'scss2-completion-at-point completion-at-point-functions) 1)))
+  ;; With the host provider set, Emmet adds no value completion of its own.
+  (dolist (mode '(css2-mode scss2-mode))
+    (with-temp-buffer
+      (funcall mode)
+      (emmet2-mode 1)
+      (should (equal completion-at-point-functions '(scss2-completion-at-point t))))))
 
 (ert-deftest scss2-mode-tab-precedes-frontend-bindings-only-in-stylesheets ()
   (dolist (mode '(css2-mode scss2-mode))

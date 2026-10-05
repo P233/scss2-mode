@@ -59,7 +59,7 @@ the host only confirms a declaration insertion position."
                  (or (eq scss2-dialect 'scss)
                      (not (string-match-p "[$]\\|#{" text))))
         (append abbr (list :lang 'css :syntax scss2-dialect
-                           :position 'declaration-start :selector-block nil
+                           :position 'declaration-start
                            :indent-width css-indent-offset
                            :at-rule (plist-get context :at-rule)))))))
 
