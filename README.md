@@ -167,12 +167,12 @@ The parser cache defaults to `user-emacs-directory/tree-sitter/scss2-mode/`. Set
 
 ## Current limits
 
-- Module completion reads unsaved edits in open local `@use` files. It does not follow `@forward` re-exports, package/load-path importers, or a complete built-in module catalog.
+- Module completion reads unsaved edits in open local `@use` files. It does not follow `@forward` re-exports, package/load-path importers, or a complete built-in module catalog; a local module that only forwards offers no names. Unqualified variables, functions and mixins come only from the current file, not from `@import`ed files. Semantic completion is exclusive where it applies, so other completion functions do not run there even without a match. Members of a module without a local file, such as `sass:math`, and import paths with a scheme or without a local directory are left to other completion functions.
 - Completion has known edge cases with existing call/argument delimiters, a few unclosed ones (an escaped `v\61 r(`, `var(` inside unclosed `@include` arguments, an unclosed group followed by another media condition), import-path replacement, nested Sass contexts, and matching during an active session.
 - If you clear `completion-category-defaults` or override the `scss2` category, your own styles match raw spellings: escaped queries such as `i\62` and Sass `_`/`-` equivalence then find nothing.
 - Escaped keywords are treated as ordinary names, and some advanced CSS syntax, such as typed `attr()` unions, remains incomplete. Highlighting alone does not establish a safe structural edit range.
 - Large symbol tables and deeply nested queries can affect responsiveness. Batch checks do not measure GUI input latency.
-- Company supports semantic value selection, but the current Emmet2 dependency rejects its read-only CAPF probe and does not enter function parentheses after Company acceptance. Emmet choices and function cursor placement need fixes in that dependency. Orderless works with the default `scss2` category; overriding the category uses raw spellings as described above.
+- Company supports semantic value selection and Emmet declaration choices, but the current Emmet2 dependency does not enter function parentheses after Company acceptance; function cursor placement needs a fix in that dependency. Orderless works with the default `scss2` category; overriding the category uses raw spellings as described above.
 
 ## Development
 
@@ -214,7 +214,7 @@ EMMET2_TEST_DEPS=/path/to/emmet2-test-deps emacs -Q --batch -L . \
 
 Corfu checks use emmet2-mode's pinned test dependencies and cover typing, selection, value fields, handoff, and undo, with popup drawing excluded. Compare benchmarks using the same Emacs version and separate byte-compiled source copies.
 
-Optional Company/Orderless checks (currently expose the two dependency failures above):
+Optional Company/Orderless checks (currently expose the function-parentheses failure above):
 
 ```sh
 emacs -Q --batch -L . -L /path/to/emmet2-mode \

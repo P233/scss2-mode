@@ -373,26 +373,36 @@ Sass loads `_name.scss' and `name.scss' as `name', so offer that name too."
 (defun scss2-completion-for-context (context)
   "Return a semantic completion table for CONTEXT in the current buffer.
 CONTEXT supplies the role and replacement bounds.  This function neither
-classifies point nor invokes abbreviation completion; composition owns both."
+classifies point nor invokes abbreviation completion; composition owns both.
+Return nil for a module without a local file or a path without a local
+listing, so that later completion functions can offer them."
   (when context
     (pcase (plist-get context :role)
       ((or 'property 'selector) nil)
       ('path
-       (let ((begin (plist-get context :beg))
-             (end (plist-get context :end)))
-         (list begin end
-               (scss2-completion--paths (buffer-substring-no-properties begin end))
-               :exclusive t :company-kind (lambda (_) 'file))))
+       (let* ((begin (plist-get context :beg))
+              (end (plist-get context :end))
+              (prefix (buffer-substring-no-properties begin end))
+              ;; Built-in modules and package URLs have no local listing.
+              (paths (and (not (string-match-p "[:#]" prefix))
+                          (scss2-completion--paths prefix))))
+         (when paths
+           (list begin end paths :exclusive t :company-kind (lambda (_) 'file)))))
       (_ (let* ((role (plist-get context :role))
+                (module (plist-get context :module))
                 (sass (memq role '(variable mixin argument module-member for-range))))
-           (emmet2-completion-capf
-            (plist-get context :beg) (plist-get context :end)
-            (lambda () (scss2--with-font-lock-view (scss2-completion--candidates context)))
-            :category 'scss2
-            :identity (if sass #'scss2-completion--sass-name #'scss2--decode-identifier)
-            :fuzzy (not (or sass (eq role 'custom-property)))
-            :annotation (concat "  " (or (plist-get context :property) (symbol-name role)))
-            :prefix (and (memq role '(at-rule variable pseudo custom-property)) t)))))))
+           ;; Decline built-in, package and load-path modules, which have no local file.
+           ;; Collect members lazily: frontends call this again on every key.
+           (unless (and module (not (scss2--with-font-lock-view
+                                      (scss2-completion--module-path module))))
+             (emmet2-completion-capf
+              (plist-get context :beg) (plist-get context :end)
+              (lambda () (scss2--with-font-lock-view (scss2-completion--candidates context)))
+              :category 'scss2
+              :identity (if sass #'scss2-completion--sass-name #'scss2--decode-identifier)
+              :fuzzy (not (or sass (eq role 'custom-property)))
+              :annotation (concat "  " (or (plist-get context :property) (symbol-name role)))
+              :prefix (and (memq role '(at-rule variable pseudo custom-property)) t))))))))
 
 (provide 'scss2-completion)
 ;;; scss2-completion.el ends here

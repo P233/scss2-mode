@@ -147,7 +147,8 @@ Interpolation and comments inside NODE are left untouched."
 (defun scss2-completion-at-point ()
   "Dispatch completion using the single context at point.
 Emmet owns declaration abbreviations; semantic completion owns other roles.
-An exclusive result keeps unrelated providers out of an owned context."
+Semantic results are exclusive, but modules and paths without local files
+decline; Emmet's table yields to later functions when it has no choices."
   (when-let* ((context (scss2-context-at-point)))
     (if (eq (plist-get context :role) 'property)
         (scss2-emmet-completion-at-point context)

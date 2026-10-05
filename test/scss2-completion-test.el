@@ -598,6 +598,42 @@
             (should (member "theme.scss" (scss2-completion-test--names)))))
       (delete-directory directory t))))
 
+(ert-deftest scss2-completion-declines-without-a-local-catalog ()
+  ;; Later providers, such as a language server, own these names and paths.
+  (let ((directory (make-temp-file "scss2-catalog-" t)))
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "_theme.scss" directory)
+            (insert "$tone: blue; @mixin paint() {}"))
+          (make-directory (expand-file-name "forward" directory))
+          (with-temp-file (expand-file-name "forward/_index.scss" directory)
+            (insert "@forward '../theme';"))
+          (pcase-dolist (`(,source ,expected)
+                         '(("@use 'sass:math'; .a { width: math.|; }" decline)
+                           ("@use 'sass:math'; .a { width: math.$|; }" decline)
+                           ("@use 'sass:math'; .a { @include math.|; }" decline)
+                           ;; Re-exports are not followed; a local module stays owned.
+                           ("@use 'forward'; .a { color: forward.$|; }" nil)
+                           ("@use 'forward'; .a { @include forward.|; }" nil)
+                           ("@use \"sass:|\";" decline)
+                           ("@use \"sass:ma|\";" decline)
+                           ("@use \"missing/directory/|\";" decline)
+                           ("@use 'theme'; .a { color: theme.$|; }" ("$tone"))
+                           ("@use 'theme'; .a { @include theme.|; }" ("paint"))
+                           ("@use 'theme'; .a { color: theme.$zz|; }" nil)
+                           ("@use \"th|\";" ("theme"))
+                           ("@use \"zz|\";" nil)))
+            (scss2-completion-test--with 'scss source
+              (setq buffer-file-name (expand-file-name "main.scss" directory))
+              (ert-info (source)
+                (let ((capf (scss2-completion-at-point)))
+                  (if (eq expected 'decline)
+                      (should-not capf)
+                    ;; An owned module or directory stays exclusive without a match.
+                    (should (eq (plist-get (nthcdr 3 capf) :exclusive) t))
+                    (should (equal (scss2-completion-test--names) expected))))))))
+      (delete-directory directory t))))
+
 (ert-deftest scss2-completion-candidates-read-font-lock-view ()
   ;; With `font-lock-dont-widen', the restriction is the whole stylesheet.
   (dolist (dont-widen '(nil t))

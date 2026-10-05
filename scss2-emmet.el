@@ -80,10 +80,7 @@ directives are completed by the semantic stylesheet completion provider."
 (defun scss2-emmet-completion-at-point (&optional context)
   "Offer Emmet's live choices, reusing the dispatcher's current CONTEXT."
   (let ((scss2-emmet--context context))
-    (when-let* ((data (and scss2-enable-emmet (scss2-emmet--provider-p) (emmet2-capf))))
-      ;; The host dispatcher remains the sole completion authority here.
-      (setf (plist-get (nthcdr 3 data) :exclusive) t)
-      data)))
+    (and scss2-enable-emmet (scss2-emmet--provider-p) (emmet2-capf))))
 
 (provide 'scss2-emmet)
 ;;; scss2-emmet.el ends here

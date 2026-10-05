@@ -158,9 +158,19 @@ nested brackets balance inside the group, so `=` or `]` there stays part of a
 raw value, as in `bgi[url(a.png?x=1)]`, `ct[']']` or `gtc[repeat(2, [a] 1fr)]`.
 
 Composition routes declaration prefixes to Emmet and other supported roles to
-semantic completion. The adapter's dynamic context binding only avoids analyzing
-the same synchronous request twice. It is never captured by a table; future
-Emmet requests use current source and revision checks.
+semantic completion. Semantic tables are exclusive: other completion functions
+do not run in an owned context, even without a match. A module without a local
+file (`sass:math`, packages, load paths) and an import path with a scheme or
+without a local directory return nil instead, leaving them to later functions
+such as a language server. Only resolving the module and checking its file is
+eager: frontends such as Corfu call the dispatcher again on every key, so
+members are collected on the first candidate query. Deciding that a local module
+which only `@forward`s has no names would parse it on each key, so it stays
+exclusive. Emmet's table keeps emmet2's own `:exclusive 'no`; every candidate is
+the abbreviation itself, so it wins whenever it has choices and yields when an
+admitted word has none. The adapter's dynamic context binding only avoids
+analyzing the same synchronous request twice. It is never captured by a table;
+future Emmet requests use current source and revision checks.
 
 Semantic tables obey Emacs's literal completion-table protocol. The `scss2` style
 uses Emmet2's shared matcher with the host's escape/Sass identity function,
@@ -235,8 +245,11 @@ Tree-sitter owns incremental parsing. Classification traverses relevant ancestor
 and current-statement text, and large sibling groups may require linear scans.
 Definition enumeration is proportional to tree size plus scope checks. Module
 exports and matching must inspect the offered symbol set; no O(1) large-project
-claim is made. File enumeration/temporary parsing occurs only for requested local
-path/module completion.
+claim is made. Path completion lists one local directory per request. Module
+completion resolves the namespace's `@use` and checks that its file exists on
+every request; that reads every `@use` in the tree, about 1.4 ms more per key on
+the 73 KB fixture and 17 ms on its 729 KB repetition (byte-compiled, batch). It
+enumerates and parses the module only when its members are queried.
 
 Highlighter rules are built during mode setup. JIT invalidation and fontification
 remain Emacs-owned. Existing batch workloads cover 0/1,000 declarations, open
@@ -581,10 +594,11 @@ and rebuilds existing empty caches. Release packaging requires a clean parser
 manifest. CI requires the repository variable `SCSS2_EMMET2_REVISION`, the full
 SHA of a published compatible Emmet2 commit.
 
-Company tests expose two dependency defects: read-only discovery suppresses
-Emmet candidates, and its `exact` acceptance status does not enter semantic
-function parentheses. Orderless category matching and ordinary Company value
-selection work in batch checks. Batch checks do not cover GUI drawing.
+Company tests expose one dependency limit: Company's `exact` acceptance status
+does not enter semantic function parentheses; Emmet2 acts only on `finished`
+because Corfu's preview insertion also reports `exact`. Emmet declaration
+choices, Orderless category matching and ordinary Company value selection work
+in batch checks. Batch checks do not cover GUI drawing.
 
 `clone-indirect-buffer` copies a buffer's local syntax hooks but not its parser.
 `scss2--extend-to-changed-start` and `scss2--syntax-propertize` therefore read

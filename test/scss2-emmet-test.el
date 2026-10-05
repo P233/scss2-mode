@@ -55,9 +55,31 @@
            (candidates (all-completions "p1-2" table)))
       (should candidates)
       (should (cl-every (lambda (candidate) (equal candidate "p1-2")) candidates))
-      (should (eq (plist-get (nthcdr 3 capf) :exclusive) t))
       (funcall exit (car candidates) 'finished)
       (should (equal (buffer-string) ".a { padding: 1px 2px; }")))))
+
+(ert-deftest scss2-emmet-empty-choices-yield-to-later-completion ()
+  ;; Only Emmet's own table knows that an admitted word has no choices.
+  (dolist (mode '(css2-mode scss2-mode))
+    (pcase-dolist (`(,input ,winner) '(("-webkit-app" "-webkit-appearance") ("m10" "m10")))
+      (with-temp-buffer
+        (insert ".a { " input " }")
+        (funcall mode)
+        (search-backward " }")
+        (add-hook 'completion-at-point-functions
+                  (lambda () (list (- (point) (length input)) (point)
+                                   '("-webkit-appearance" "m10-later")))
+                  0 t)
+        (let* (offered
+               (completion-in-region-function
+                (lambda (begin end table predicate)
+                  (setq offered (delete-dups
+                                 (all-completions (buffer-substring-no-properties begin end)
+                                                  table predicate)))
+                  t)))
+          (completion-at-point)
+          (ert-info ((format "%s %s" mode input))
+            (should (equal offered (list winner)))))))))
 
 (ert-deftest scss2-emmet-preserves-native-alternative-identities ()
   (scss2-emmet-test--buffer ".a { p1-2| }"

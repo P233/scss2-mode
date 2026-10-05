@@ -56,19 +56,29 @@
     (should (eq (get-text-property (match-beginning 0) 'face) 'font-lock-variable-name-face))))
 
 (ert-deftest scss2-performance-semantic-admission-defers-candidate-collection ()
-  (with-temp-buffer
-    (insert "$token: red; .a { color: $to }") (backward-char 2)
-    (let ((position (point))) (scss2-mode) (goto-char position))
-    (let ((collect (symbol-function 'scss2-completion--candidates)) (calls 0) data)
-      (cl-letf (((symbol-function 'scss2-completion--candidates)
-                 (lambda (&rest args) (cl-incf calls) (apply collect args))))
-        (dotimes (_ 3) (setq data (scss2-completion-at-point)))
-        (should (zerop calls))
-        (completion-metadata "$to" (nth 2 data) nil)
-        (should (zerop calls))
-        (should (member "$token" (all-completions "$to" (nth 2 data))))
-        (should (member "$token" (all-completions "$to" (nth 2 data))))
-        (should (= calls 1))))))
+  ;; Frontends probe the dispatcher on every key; a module is read only when queried.
+  (let ((directory (make-temp-file "scss2-admission-" t)))
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "_tokens.scss" directory) (insert "$token: red;"))
+          (dolist (source '("$token: red; .a { color: $to }"
+                            "@use 'tokens'; .a { color: tokens.$to }"))
+            (with-temp-buffer
+              (insert source) (backward-char 2)
+              (setq buffer-file-name (expand-file-name "main.scss" directory))
+              (let ((position (point))) (scss2-mode) (goto-char position))
+              (let ((collect (symbol-function 'scss2-completion--candidates)) (calls 0) data)
+                (cl-letf (((symbol-function 'scss2-completion--candidates)
+                           (lambda (&rest args) (cl-incf calls) (apply collect args))))
+                  (dotimes (_ 3) (setq data (scss2-completion-at-point)))
+                  (should (zerop calls))
+                  (completion-metadata "$to" (nth 2 data) nil)
+                  (should (zerop calls))
+                  (should (member "$token" (all-completions "$to" (nth 2 data))))
+                  (should (member "$token" (all-completions "$to" (nth 2 data))))
+                  (should (= calls 1))))
+              (set-buffer-modified-p nil))))
+      (delete-directory directory t))))
 
 (ert-deftest scss2-performance-compiled-queries-still-read-edited-definitions ()
   (with-temp-buffer
