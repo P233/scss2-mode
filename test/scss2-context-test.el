@@ -29,6 +29,20 @@
   (scss2-test-with-buffer 'scss2-mode "@mixin m($tone) { @include pa│; }"
     (should (eq (plist-get (scss2-context-at-point) :role) 'mixin))))
 
+(ert-deftest scss2-context-font-lock-dont-widen-reads-the-restriction ()
+  ;; Host text outside a code block's restriction is not stylesheet syntax.
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (host '("<p>see a/*b</p>" "<p>Don't panic</p>"
+                    "<template><p>Plain text</p></template>"))
+      (scss2-test-with-buffer mode (concat host "\n<style>\n.a { color: r│ }\n</style>\n")
+        (setq-local font-lock-dont-widen t)
+        (narrow-to-region (save-excursion (search-backward ".a")) (line-end-position))
+        (ert-info ((format "%s after %S" mode host))
+          (let ((context (scss2-context-at-point)))
+            (should (eq (plist-get context :role) 'property-value))
+            (should (equal (plist-get context :property) "color"))
+            (should-not (plist-get context :at-rule))))))))
+
 (ert-deftest scss2-context-keeps-literals-opaque ()
   (dolist (mode '(css2-mode scss2-mode))
     (dolist (source '("/* co│lor */" ".a { content: \"co│lor\"; }"))

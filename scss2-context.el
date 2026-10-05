@@ -541,8 +541,7 @@ Return nil in opaque text, otherwise a plist with :role, :beg and :end.
 Values retain :property; Sass members may carry :module.  Incomplete input
 is intentional."
   (let ((minimum (point-min)) (maximum (point-max)))
-    (save-restriction
-      (widen)
+    (scss2--with-font-lock-view
       (when-let* ((context (scss2-context--base-context))
                   (beginning (plist-get context :beg))
                   (_ (<= minimum beginning (point) (plist-get context :end) maximum)))

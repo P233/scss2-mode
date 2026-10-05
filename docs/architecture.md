@@ -180,9 +180,13 @@ an integration contract exercising both on the same unclosed callable.
 
 - One document authority: buffer text, with Emacs-owned undo and incremental parse.
 - One buffer syntax identity; no second parser for highlighting or completion.
-- Tree hooks, syntax properties and treesit.el commands read Font Lock's view:
-  the widened buffer unless `font-lock-dont-widen` is set. Commands then act only
-  inside the restriction. Other scss2 tree readers always widen.
+- Every scss2 tree reader reads Font Lock's view: the widened buffer unless
+  `font-lock-dont-widen` is set. That covers tree hooks, syntax properties,
+  treesit.el commands, context, completion candidates, Emmet extraction and
+  structural targets. Commands then act only inside the caller's restriction.
+  Hooks that Emacs runs on its own read the tree only when the buffer has its
+  own scss2 parser; otherwise, as in a `clone-indirect-buffer` clone, they keep
+  the base mode's behavior.
 - Every reparse after a text change marks the ranges it changed for
   refontification and extends the next syntax propertization back to them
   within that caller's restriction, whichever reader caused it; idle release's
@@ -293,11 +297,14 @@ before the restriction keeps its previous syntax properties, as with the stock
 hook.
 
 `scss2--syntax-propertize` also queries the tree in Font Lock's view, so syntax
-properties come from the parse that Font Lock uses. The package's other tree
-readers always widen: context, completion and structural commands, including
-the token check when `scss2-kill` deletes a comment, resolve in the full syntax
-and then enforce the accessible range. Imenu and idle release widen before
-reading.
+properties come from the parse that Font Lock uses. So do the package's other
+tree readers: context, completion candidates, Emmet's abbreviation extraction
+and structural commands, including the token and whole-line checks when
+`scss2-kill` deletes a comment, resolve in Font Lock's view and then enforce the
+accessible range. In a `font-lock-dont-widen` host the restriction is the
+document, so completion and commands parse only the restriction, as redisplay
+does, and host text is never parsed as stylesheet code. Imenu and idle release
+widen before reading; local module completion reads other buffers widened.
 
 If either treesit.el function is undefined or missing from its hook,
 `scss2--widen-tree-hooks` leaves that hook unchanged. Editing then keeps Emacs's
@@ -389,8 +396,12 @@ byte compilation reports a removed treesit.el command or
   syntax properties then equal a new unnarrowed buffer's.
 - `scss2-narrowing-font-lock-dont-widen-reads-the-restriction`: with
   `font-lock-dont-widen`, typing parses only the restriction, once per key, and
-  a narrowed code block after host text containing `/*` gets one restricted
-  parse and the block's own syntax properties.
+  a narrowed code block after host text containing `/*`, an apostrophe or plain
+  markup gets one restricted parse, the block's own syntax properties and
+  context, and `scss2-mark` and `scss2-kill` targets inside it.
+- `scss2-narrowing-comment-kill-at-the-edge-keeps-tokens-apart`: `scss2-kill`
+  of a comment at a restriction's start or end keeps the value tokens around it
+  apart.
 - `scss2-narrowing-comment-commands-never-parse-the-restriction`:
   `comment-region` and `uncomment-region` in narrowed and widened buffers.
 - `scss2-narrowing-features-read-the-full-tree`: context, completion,
@@ -561,6 +572,16 @@ Company tests expose two dependency defects: read-only discovery suppresses
 Emmet candidates, and its `exact` acceptance status does not enter semantic
 function parentheses. Orderless category matching and ordinary Company value
 selection work in batch checks. Batch checks do not cover GUI drawing.
+
+`clone-indirect-buffer` copies a buffer's local syntax hooks but not its parser.
+`scss2--extend-to-changed-start` and `scss2--syntax-propertize` therefore read
+the tree only when the buffer has its own scss2 parser. A clone keeps base-mode
+syntax, indentation, comments and motion, and the faces it shares with its
+base, without tree features; raw-text `//` is not corrected there. Re-running
+the mode from `clone-indirect-buffer-hook` was rejected: in Emacs 31.1 a killed
+indirect buffer's parser leaks into its base (upstream report draft 02, in
+tree-sitter-scss `plans/upstream-reports/`), and a base with two parsers is
+never idle-released.
 
 For a new feature, first identify its owner and behavioral contract, then change
 the owning subsystem and add acceptance coverage. Changes to syntax interpretation

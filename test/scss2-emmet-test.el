@@ -333,6 +333,13 @@
         (should-error (scss2-expand) :type 'user-error)
         (should (equal (buffer-string) before))))))
 
+(ert-deftest scss2-emmet-extraction-reads-font-lock-view ()
+  ;; With `font-lock-dont-widen', text past the restriction belongs to the host.
+  (scss2-emmet-test--buffer ".a { m10|+p20 }"
+    (setq-local font-lock-dont-widen t)
+    (narrow-to-region (point-min) (point))
+    (should (equal (plist-get (emmet2-context-analyze) :abbr) "m10"))))
+
 (ert-deftest scss2-emmet-dispatcher-analyzes-once-without-retaining-context ()
   (dolist (input '("m1" "dis" "ovh,ta"))
     (scss2-emmet-test--buffer (concat ".a { " input "| }")

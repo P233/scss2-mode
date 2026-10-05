@@ -102,7 +102,9 @@ between an edit and redisplay would leave stale faces and syntax properties."
 Unlike flushing `syntax-ppss', this never asks `syntax-propertize' to start
 before a restriction that a reparse in Font Lock's view cannot see."
   ;; Reparse first, so that the notifier records any pending change.
-  (scss2--with-font-lock-view (scss2--root-node))
+  ;; A `clone-indirect-buffer' clone copies this hook but has no parser.
+  (when (treesit-parser-list nil (scss2--language))
+    (scss2--with-font-lock-view (scss2--root-node)))
   (let ((changed (and scss2--changed-start (max scss2--changed-start (point-min)))))
     (setq scss2--changed-start nil)
     (when (and changed (< changed start))
@@ -208,14 +210,16 @@ Major-mode changes let Emacs discard the previous parser and local settings."
 Raw CSS and unquoted URLs cannot start silent comments.  Correct the
 inherited syntax table there so SMIE and comment commands see real code."
   (funcall css-syntax-propertize-function start end)
-  (dolist (node (scss2--with-font-lock-view
-                  (treesit-query-capture
-                   (scss2--root-node) (scss2--query '((raw_text) @raw)) start end t)))
-    (save-excursion
-      (goto-char (max start (treesit-node-start node)))
-      (while (search-forward "/" (min end (treesit-node-end node)) t)
-        (put-text-property (1- (point)) (point)
-                           'syntax-table (string-to-syntax "."))))))
+  ;; A `clone-indirect-buffer' clone has no parser; keep the base mode's syntax.
+  (when (treesit-parser-list nil (scss2--language))
+    (dolist (node (scss2--with-font-lock-view
+                    (treesit-query-capture
+                     (scss2--root-node) (scss2--query '((raw_text) @raw)) start end t)))
+      (save-excursion
+        (goto-char (max start (treesit-node-start node)))
+        (while (search-forward "/" (min end (treesit-node-end node)) t)
+          (put-text-property (1- (point)) (point)
+                             'syntax-table (string-to-syntax ".")))))))
 
 (defun scss2--language ()
   "Return the language of this buffer's sole parser."

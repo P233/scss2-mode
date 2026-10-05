@@ -182,7 +182,7 @@ A blank character belongs to no token."
       node)))
 
 (defun scss2--site ()
-  "Return (NODE TOUCHED ATOM STATEMENT) describing point in the full syntax.
+  "Return (NODE TOUCHED ATOM STATEMENT) describing point in the tree.
 NODE is the smallest node containing point.  TOUCHED is the smallest node
 holding the character point is on, else the character before it, and nil
 in blank space.  ATOM is the outermost literal around point below
@@ -259,7 +259,7 @@ owns all of its nested expressions."
     target))
 
 (defun scss2--resolve-target-1 (kind)
-  "Derive KIND at point from the full buffer's syntax."
+  "Derive KIND at point from the tree in the current view."
   (let* ((site (scss2--site))
          (node (car site)))
     (pcase kind
@@ -296,8 +296,8 @@ owns all of its nested expressions."
       (_ (scss2--item-target site)))))
 
 (defun scss2--resolve-target (&optional kind)
-  "Resolve KIND in the full syntax, then enforce the accessible edit range."
-  (let ((target (save-restriction (widen) (scss2--resolve-target-1 kind))))
+  "Resolve KIND in Font Lock's view, then enforce the accessible edit range."
+  (let ((target (scss2--with-font-lock-view (scss2--resolve-target-1 kind))))
     (scss2--check-target target)))
 
 (defun scss2--value-tab-target ()
@@ -479,21 +479,23 @@ Separate ranges preserve comments between an item and its separator."
      (t (list (cons begin end))))))
 
 (defun scss2--whole-lines (range)
-  "Return RANGE extended over its lines, or nil when other text shares them."
-  (save-excursion
-    (let ((begin (progn (goto-char (car range)) (skip-chars-backward " \t") (point)))
-          (end (progn (goto-char (cdr range)) (skip-chars-forward " \t\r") (point))))
-      (when (and (progn (goto-char begin) (bolp))
-                 (progn (goto-char end) (eolp)))
-        (cons begin (if (eobp) end (1+ end)))))))
+  "Return RANGE extended over its lines, or nil when other text shares them.
+Lines are judged in Font Lock's view; the result stays accessible."
+  (let ((accessible-beg (point-min)) (accessible-end (point-max)))
+    (save-excursion
+      (scss2--with-font-lock-view
+        (let ((begin (progn (goto-char (car range)) (skip-chars-backward " \t") (point)))
+              (end (progn (goto-char (cdr range)) (skip-chars-forward " \t\r") (point))))
+          (when (and (progn (goto-char begin) (bolp))
+                     (progn (goto-char end) (eolp)))
+            (cons (max begin accessible-beg)
+                  (min (if (eobp) end (1+ end)) accessible-end))))))))
 
 (defun scss2--token-signature (position)
   "Return the syntax token's type and spelling at POSITION, or nil in blanks."
-  (when (<= (point-min) position (1- (point-max)))
-    (save-restriction
-      (widen)
-      (when-let* ((node (scss2--covering-node position)))
-        (cons (treesit-node-type node) (treesit-node-text node t))))))
+  (scss2--with-font-lock-view
+    (when-let* ((node (scss2--covering-node position)))
+      (cons (treesit-node-type node) (treesit-node-text node t)))))
 
 (defun scss2--kill-target (target)
   "Kill TARGET, retaining surrounding comments and unrelated whitespace.

@@ -103,12 +103,13 @@ left alone.
 
 Typing in a narrowed buffer costs the same as in the widened buffer because both
 modes read the syntax tree in the same region as Font Lock: the whole buffer,
-unless `font-lock-dont-widen` is set. Defun motion, `M-q`, `transpose-sexps`,
-outline commands and `which-function-mode` find their targets in that tree too,
-then act only inside the restriction: motion stops at its edges, `M-q`
-reindents only the defun's accessible lines and does not fill a comment that
-begins before the restriction, and `transpose-sexps` refuses sexps that extend
-outside it. If narrowed editing is slow, see
+unless `font-lock-dont-widen` is set. Completion, structural commands, defun
+motion, `M-q`, `transpose-sexps`, outline commands and `which-function-mode`
+find their targets in that tree too, then act only inside the restriction:
+motion stops at its edges, `M-q` reindents only the defun's accessible lines and
+does not fill a comment that begins before the restriction, and
+`transpose-sexps` refuses sexps that extend outside it. If narrowed editing is
+slow, see
 [Narrowing and the shared parser](docs/architecture.md#narrowing-and-the-shared-parser).
 
 ### Commands and key bindings

@@ -387,7 +387,7 @@ classifies point nor invokes abbreviation completion; composition owns both."
                 (sass (memq role '(variable mixin argument module-member for-range))))
            (emmet2-completion-capf
             (plist-get context :beg) (plist-get context :end)
-            (lambda () (save-restriction (widen) (scss2-completion--candidates context)))
+            (lambda () (scss2--with-font-lock-view (scss2-completion--candidates context)))
             :category 'scss2
             :identity (if sass #'scss2-completion--sass-name #'scss2--decode-identifier)
             :fuzzy (not (or sass (eq role 'custom-property)))

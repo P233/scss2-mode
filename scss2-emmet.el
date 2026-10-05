@@ -50,11 +50,10 @@ the host only confirms a declaration insertion position."
               (context (or scss2-emmet--context (scss2-context-at-point)))
               (_ (and (eq (plist-get context :role) 'property)
                       (plist-get context :start))))
-    (when-let* ((abbr (save-restriction
-                       ;; Extract the complete token, including any hidden
-                       ;; suffix.  Emmet rejects bounds outside the visible area.
-                       (widen)
-                       (emmet2-extract (plist-get context :start) (point-max) 'css)))
+    (when-let* ((abbr (scss2--with-font-lock-view
+                        ;; Include a suffix that narrowing hides, within Font Lock's view.
+                        ;; Emmet rejects bounds outside the visible area.
+                        (emmet2-extract (plist-get context :start) (point-max) 'css)))
                 (text (plist-get abbr :abbr)))
       (when (and (string-match-p "\\`[a-zA-Z-]" text)
                  (or (eq scss2-dialect 'scss)

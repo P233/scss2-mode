@@ -598,6 +598,17 @@
             (should (member "theme.scss" (scss2-completion-test--names)))))
       (delete-directory directory t))))
 
+(ert-deftest scss2-completion-candidates-read-font-lock-view ()
+  ;; With `font-lock-dont-widen', the restriction is the whole stylesheet.
+  (dolist (dont-widen '(nil t))
+    (scss2-completion-test--with 'scss "$host: red;\n$own: blue; .a { color: $| }"
+      (setq-local font-lock-dont-widen dont-widen)
+      (narrow-to-region (save-excursion (search-backward "$own")) (point-max))
+      (let ((capf (scss2-completion-for-context
+                   (list :role 'variable :beg (1- (point)) :end (point)))))
+        (should (equal (sort (all-completions "$" (nth 2 capf)) #'string<)
+                       (if dont-widen '("$own") '("$host" "$own"))))))))
+
 (ert-deftest scss2-completion-rejects-directives-in-values ()
   (scss2-completion-test--with 'css ".a { color: @|; }"
     (should-not (scss2-completion-at-point))))
