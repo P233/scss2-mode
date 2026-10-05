@@ -403,7 +403,7 @@ COMMANDS default to the bindings of C-M-a and C-M-e."
     (should-not (treesit-query-capture (scss2--root-node)
                                       '((interpolation) @expression)))
     (goto-char (point-min)) (search-forward "foo")
-    (scss2-empty-value)
+    (scss2-empty)
     (should (equal (buffer-string) ".a{content:;other:\"bar}\";} .b{color:red;}")))
   (dolist (expression '("#{not \"a\"}" "#{\"a\" \"b\"}" "#{\";\"}" "#{\"}text\"}"))
     (with-temp-buffer
@@ -506,7 +506,7 @@ COMMANDS default to the bindings of C-M-a and C-M-e."
     (insert ".a { --raw: { literal }; color: red; }")
     (css2-mode)
     (goto-char (point-min)) (search-forward "literal")
-    (scss2-empty-block)
+    (scss2-empty t)
     (should (equal (buffer-string) ".a {}"))))
 
 (ert-deftest scss2-mode-css-function-result-spellings-have-literal-token-faces ()

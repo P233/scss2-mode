@@ -97,8 +97,8 @@
         (should (equal faces (scss2-resources-test--faces))))
       (should (scss2--release-buffer-resources))
       (goto-char (point-min)) (search-forward "2px") (backward-char)
-      (scss2-kill-value-item)
-      (should (equal (buffer-string) ".a { color: #ff0000; margin: 1px; }"))
+      (scss2-kill)
+      (should (equal (buffer-string) ".a { color: #ff0000;  }"))
       (undo-boundary) (undo-only 1)
       (should (equal (buffer-string) ".a { color: #ff0000; margin: 1px 2px; }")))))
 

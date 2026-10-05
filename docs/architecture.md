@@ -51,8 +51,8 @@ repaired. Integration tests check that repair restores editing, undo/redo and
 the same face spans as a fresh buffer, rather than requiring special parser
 recovery or punctuation captures inside `ERROR` nodes.
 
-The documented commands, major modes, `scss2-completion-at-point` autoload and
-completion category remain stable. Lower-level development uses the explicit
+The major modes, `scss2-completion-at-point` autoload and completion category
+remain stable. README defines the structural command surface. Lower-level development uses the explicit
 interfaces above; private `--` helpers are owned by their library.
 
 ## Initialization and lifetime
@@ -207,8 +207,8 @@ Commands derive a target from the current tree, validate its accessible range an
 recovery boundary, then execute through `scss2--transaction`. Emacs's atomic change
 group owns text history. The transaction also restores point, mark, activation and
 kill-ring state when an operation signals an error or quit. No syntax node or
-position is cached across edits. Clipboard callbacks are an external mutation
-boundary and retain the existing source/point checks.
+position is cached across edits. Clipboard callbacks run inside the transaction;
+buffer switches do not transfer ownership of the edit or its rollback.
 
 Completion tolerates unfinished code; that does not authorize destructive edits
 through uncertain ranges. These policies have separate acceptance tests, including
@@ -379,8 +379,8 @@ hook.
 `scss2--syntax-propertize` also queries the tree in Font Lock's view, so syntax
 properties come from the parse that Font Lock uses. So do the package's other
 tree readers: context, completion candidates, Emmet's abbreviation extraction
-and structural commands, including the token and whole-line checks when
-`scss2-kill` deletes a comment, resolve in Font Lock's view and then enforce the
+and structural commands, including whole-line deletion and comment grouping,
+resolve in Font Lock's view and then enforce the
 accessible range. In a `font-lock-dont-widen` host the restriction is the
 document, so completion and commands parse only the restriction, as redisplay
 does, and host text is never parsed as stylesheet code. Imenu and idle release
@@ -479,13 +479,12 @@ byte compilation reports a removed treesit.el command or
   a narrowed code block after host text containing `/*`, an apostrophe or plain
   markup gets one restricted parse, the block's own syntax properties and
   context, and `scss2-mark` and `scss2-kill` targets inside it.
-- `scss2-narrowing-comment-kill-at-the-edge-keeps-tokens-apart`: `scss2-kill`
-  of a comment at a restriction's start or end keeps the value tokens around it
-  apart.
+- `scss2-narrowing-incomplete-comment-ranges-reject-uncomment`: a comment
+  whose delimiters extend outside the restriction cannot be uncommented.
 - `scss2-narrowing-comment-commands-never-parse-the-restriction`:
   `comment-region` and `uncomment-region` in narrowed and widened buffers.
 - `scss2-narrowing-features-read-the-full-tree`: context, completion,
-  `scss2-mark`, `scss2-kill` of a comment and Imenu.
+  `scss2-mark`, `scss2-kill` of a declaration and Imenu.
 - `scss2-narrowing-syntax-extension-stays-accessible`: the clamp, also after an
   earlier reparse, without `syntax-propertize` complaining about the narrowing.
 - `scss2-narrowing-wrappers-replace-only-present-treesit-hooks`: installation and
@@ -638,13 +637,34 @@ release eligibility, the registration test, the notifier assertion in
 
 The dialect parser cache, transactional guards, direct local module support and
 specialized identifier semantics serve current contracts. Dispatch is explicit,
-and the core and semantic suites run independently. Structural edits keep
-tokens when deleting comments, also at a restriction's edge, protect the required
-first CSS `var()` argument, keep CRLF when duplicating statements, stop
-`scss2-zap` at the closer of the innermost delimited construct around point,
-refuse to duplicate a raw custom-property value and treat an `@at-root` query as
-its statement's header; completion finishes unfinished loop ranges, variable
-values and loop bindings.
+and the core and semantic suites run independently. Structural entity commands
+select only complete declarations, top-level selector branches, and statements
+with direct blocks. Value atoms, arguments,
+parameters, map entries and leaf at-rules are not independent targets. Explicit
+prefix selection resolves the nearest structural block; an else branch's entity
+is the complete conditional chain. Empty independently resolves balanced
+interiors, complete declaration values (including flags), and all siblings of an
+if condition field. Its output can be intentionally incomplete.
+
+Selector deletion removes an adjacent comma without consuming intervening
+comments. Commenting wraps the branch and its comma together so the remaining
+selector stays valid, using block comments for inline targets and standalone
+line comments for SCSS lines. Adjacent standalone `//` comments are uncommented
+together; blank lines separate groups. When commenting a block, blank lines
+also receive `//` so the whole block can be restored together. Line comments
+preserve original blank-line whitespace and CRLF endings. Emacs's comment machinery quotes and
+restores nested block comment delimiters. Duplicate preserves body text and
+CRLF; repeated mark keeps its existing selection. Input errors and inaccessible
+ranges are rejected before mutation, and transactions roll back failed edits.
+
+Avy is loaded only by its command. Its bounds come from the nearest complete
+rule or at-rule, excluding small value containers and nested property blocks.
+The entire block, including its header, is passed unchanged to Avy; both Avy
+window settings and the prefix argument are locally disabled. This prevents
+another buffer from receiving the same numeric range. Label rendering and
+off-screen interaction follow Avy; no paging or scrolling layer is added.
+
+Completion finishes unfinished loop ranges, variable values and loop bindings.
 
 The grammar cache rejects empty or missing compiler output before publishing it
 and rebuilds existing empty caches. Its identity hashes only the native build

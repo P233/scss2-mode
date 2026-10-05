@@ -70,20 +70,26 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 
 | Command | Action |
 | --- | --- |
-| `scss2-kill` | Kill the nearest statement, selector branch, argument, or value item |
-| `scss2-empty` | Clear content, keeping its container |
-| `scss2-substitute` | Replace content with the current kill |
-| `scss2-copy` | Copy the target |
-| `scss2-duplicate` | Duplicate a statement or item with its separator |
-| `scss2-mark` | Select the target |
-| `scss2-zap` | Delete from point to the content's end without changing the kill ring |
-| `scss2-kill-block` | Kill a block with its header (and any `@else` branches) |
-| `scss2-empty-block` | Clear a block, keeping its header and braces |
-| `scss2-kill-selector` | Kill one selector branch |
-| `scss2-kill-property` | Kill a property or variable declaration |
-| `scss2-empty-value` | Clear a declaration's value and flags |
-| `scss2-kill-value-item` | Kill one value, argument, parameter, or map entry |
+| `scss2-kill` | Kill a selector branch, complete declaration, or at-rule block |
+| `scss2-empty` | Clear the nearest `()` / `[]` / `{}` interior, declaration value, or `@if` condition |
+| `scss2-copy` | Copy the same entity as kill |
+| `scss2-comment-uncomment` | Comment the entity, or uncomment an existing comment |
+| `scss2-duplicate` | Duplicate the entity with its comma or statement separator |
+| `scss2-mark` | Select the entity; repeated calls keep the selection |
+| `scss2-avy-word` | Jump to a word inside the invocation's complete rule or at-rule block |
 | `scss2-expand` | Expand a declaration abbreviation |
+
+`C-u` selects the nearest complete structural block for kill, copy, comment,
+duplicate and mark, including its header and any `@else` branches. For empty,
+`C-u` clears only the nearest block's body (the current conditional branch).
+A declaration includes its complete multiline value, flags and terminator;
+arguments, parameters and map entries are not separate editing targets.
+
+Avy is optional: install [Avy](https://github.com/abo-abo/avy) to use
+`scss2-avy-word`. Its range is the nearest complete rule or at-rule at invocation,
+including the header and nested blocks, rather than the visible window range.
+Nested property bodies and raw value containers do not narrow that range.
+Candidates stay in the invoking window; label display follows Avy's usual behavior.
 
 ```elisp
 (with-eval-after-load 'scss2-mode
@@ -92,7 +98,14 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
   (keymap-set css2-mode-map "C-c e" #'scss2-expand))
 ```
 
-A target is a whole statement or one item of a sequence, and point must touch it: blank space, a comma, or a flag selects nothing, while a name or delimiter stands for its owner. Flags such as `!important` stay with their declaration, a rule keeps its last selector, and a variable its only value. Each command is one undo step; incomplete or ambiguous boundaries are rejected, and a failed edit restores text, point, selection, and the kill ring. See the [structural edge cases](docs/architecture.md#decisions-and-known-limits).
+Entity commands require point to touch a token. Blank space and unsupported
+leaf statements do not select a containing rule; use `C-u` explicitly.
+Selector branches include nested pseudo-class selectors. Killing or commenting
+the only branch is rejected: select the whole rule with `C-u`. Comments between
+a killed branch and its comma remain in place. Empty can intentionally leave
+an unfinished value or condition. Each mutation is one undo step; incomplete
+input boundaries are rejected, and a failed edit restores text, point, selection
+and the kill ring. See the [structural edge cases](docs/architecture.md#decisions-and-known-limits).
 
 ## Settings
 
@@ -145,6 +158,8 @@ EMMET2_TEST_DEPS=/path/to/emmet2-test-deps emacs -Q --batch -L . \
 # Company/Orderless
 emacs -Q --batch -L . -L /path/to/emmet2-mode \
   -L /path/to/company-mode -L /path/to/orderless -l scripts/test-frontends.el
+# Avy: real candidates, key selection, cancellation and window isolation
+emacs -Q --batch -L . -L /path/to/avy -l scripts/test-avy.el
 ```
 
 To update the parser, change and test it in the grammar project, then import the complete snapshot instead of editing `vendor/`:

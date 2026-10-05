@@ -56,7 +56,7 @@
           (search-forward "margin")
           (unless (get-text-property (1- (point)) 'face)
             (error "Installed highlighting query did not fontify a property"))
-          (scss2-empty-value)
+          (scss2-empty)
           (unless (equal (buffer-string) ".demo { margin: ; }")
             (error "Installed structural edit produced %S" (buffer-string)))
           (unless (local-variable-p 'emmet2-context-provider)

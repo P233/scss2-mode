@@ -939,7 +939,7 @@
 
 (ert-deftest scss2-edit-unclosed-callable-completion-does-not-establish-edit-targets ()
   ;; This contract crosses completion and editing, so exercise the complete mode.
-  (dolist (command '(scss2-kill-property scss2-empty-value scss2-duplicate))
+  (dolist (command '(scss2-kill scss2-empty scss2-duplicate))
     (scss2-completion-test--with 'scss "@mixin paint($tone) { color: $to|;"
       (let ((data (scss2-completion-at-point)))
         (should (member "$tone" (all-completions "$to" (nth 2 data)))))
