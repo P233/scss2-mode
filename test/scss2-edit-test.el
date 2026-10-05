@@ -123,6 +123,33 @@
       (should (eq (char-before) ?\;))
       (should-not mark-active))))
 
+(ert-deftest scss2-edit-incomplete-statement-keeps-following-block-editable ()
+  (dolist (prefix '("@mixin paint($tone) { @if true {} @else }"
+                    "@mixin paint($tone) { @if true {} @else if $tone }"
+                    "@mixin paint($tone) { color: $/*c*/; }"
+                    "@mixin paint($tone) { color: $ !important; }"
+                    "@mixin paint($tone) { @each $/*c*/in $list {} }"
+                    "@mixin paint($tone) { @for $ from 1 through 3 {} }"
+                    "@mixin paint($tone) { color: $ //c\n; }"))
+    (scss2-edit-test--buffer 'scss2-mode (concat prefix " .af│ter {}")
+      (should (treesit-node-check (scss2--root-node) 'has-error))
+      (buffer-enable-undo)
+      (setq buffer-undo-list nil)
+      (let ((original (buffer-string)) (position (point)))
+        (undo-boundary)
+        (scss2-kill t)
+        (undo-boundary)
+        (should (equal (buffer-string) (concat prefix " ")))
+        (should (equal (car kill-ring) ".after {}"))
+        (should (= (point) (1+ (length (concat prefix " ")))))
+        (undo 1)
+        (should (equal (buffer-string) original))
+        (should (= (point) position))
+        (undo-redo 1)
+        (should (equal (buffer-string) (concat prefix " ")))))
+    (scss2-edit-test--buffer 'scss2-mode (concat "│" prefix " .after {}")
+      (scss2-edit-test--unchanged (lambda () (scss2-kill t))))))
+
 (ert-deftest scss2-edit-repaired-statements-restore-following-block-editing ()
   (dolist (entry '(("@if true {} @else" . "@if true {} @else {}")
                    ("@if true {} @else if $tone" . "@if true {} @else if $tone {}")

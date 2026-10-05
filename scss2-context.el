@@ -285,7 +285,7 @@ non-ASCII names."
     (if (and identifier
              (<= (treesit-node-start identifier) (point) (treesit-node-end identifier))
              (not (treesit-search-subtree identifier "interpolation")))
-        (cons (scss2--identifier-start identifier) (treesit-node-end identifier))
+        (cons (treesit-node-start identifier) (treesit-node-end identifier))
       (cons (save-excursion (skip-chars-backward "[:alnum:]_$\200-\U0010ffff-") (point))
             (save-excursion (skip-chars-forward "[:alnum:]_\200-\U0010ffff-") (point))))))
 
@@ -324,7 +324,7 @@ statement's colon to an unfinished value."
     (scss2-context--context
      (if value (if media 'media-value 'property-value)
        (if media 'media-feature 'property))
-     (if (and (not value) name) (scss2--identifier-start name) beginning)
+     (if (and (not value) name) (treesit-node-start name) beginning)
      (if (and (not value) name) (treesit-node-end name) ending)
      :property property)))
 

@@ -4,7 +4,7 @@ Edit CSS and SCSS in Emacs with syntax highlighting, context-aware completion, s
 
 **The bundled parser is [P233/tree-sitter-scss](https://github.com/P233/tree-sitter-scss), an independent, unofficial grammar.** It is not affiliated with, or interchangeable with, [tree-sitter-grammars/tree-sitter-scss](https://github.com/tree-sitter-grammars/tree-sitter-scss), and you do not install a grammar separately.
 
-Parsing and highlighting target complete CSS/SCSS files. While code is incomplete, colors and recovery boundaries are best effort, and structural commands may refuse a nearby target. Repairing the syntax restores normal parsing, highlighting and structural editing.
+Parsing and highlighting target complete CSS/SCSS files. A statement being typed usually stays one local error, so the rules after it keep their colors and structural commands; the unfinished construct itself is best effort and refuses structural edits until it is repaired.
 
 ## Requirements
 
@@ -131,6 +131,7 @@ Corfu is the supported frontend. Company works through standard `completion-at-p
 - Built-in modules such as `sass:math`, package or load-path modules, and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: other completion functions do not run there, even without a match.
 - Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments, or an unclosed media group followed by another condition.
 - Escaped keywords such as `@m\65 dia` are read as ordinary names, and typed `attr()` unions such as `type(<length> | <percentage>)` do not parse.
+- Internet Explorer–only syntax is not supported: the `*` property hack, `alpha(opacity=50)` arguments, `progid:` filters and `expression()` parse as local errors.
 - Each open buffer keeps a syntax tree of tens of bytes per source byte, so several large files use noticeably more memory than `scss-mode`; buffers shown in no window release it after `scss2-idle-release-delay`.
 
 ## Development

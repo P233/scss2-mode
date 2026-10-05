@@ -282,20 +282,12 @@ inherited syntax table there so SMIE and comment commands see real code."
          (match-string 2 escape)))
      text t t)))
 
-(defun scss2--identifier-start (node)
-  "Return NODE's name start, excluding a literal legacy property hack."
-  (let ((beginning (treesit-node-start node)))
-    (if (and (equal (treesit-node-type node) "property_name")
-             (eq (char-after beginning) ?*))
-        (1+ beginning)
-      beginning)))
-
 (defun scss2--identifier-text (node)
   "Return NODE's static spelling, or nil for a dynamic identifier."
   (when (and node
              (or (zerop (treesit-node-child-count node))
                  (not (treesit-search-subtree node "interpolation"))))
-    (buffer-substring-no-properties (scss2--identifier-start node) (treesit-node-end node))))
+    (buffer-substring-no-properties (treesit-node-start node) (treesit-node-end node))))
 
 (defun scss2--identifier-name (node)
   "Return NODE's static decoded name, or nil for a dynamic identifier."

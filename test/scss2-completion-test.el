@@ -284,15 +284,6 @@
     (should (eq (plist-get (scss2-context-at-point) :role) 'variable))
     (should (equal (scss2-completion-test--names) '("$😀tone")))))
 
-(ert-deftest scss2-completion-legacy-property-hack-retains-its-prefix ()
-  (scss2-completion-test--with 'css ".a { |*color: red; }"
-    (should-not (scss2-completion-at-point)))
-  (scss2-completion-test--with 'css ".a { *col|: red; }"
-    (should-not (scss2-completion-at-point)))
-  (scss2-completion-test--with 'css ".a { *color: re|; }"
-    (should (equal (plist-get (scss2-context-at-point) :property) "color"))
-    (should (member "red" (scss2-completion-test--names)))))
-
 (ert-deftest scss2-completion-escaped-identifiers-match-with-safe-insertion ()
   (dolist (case '((".a { color: r\\65 |; }" "red" ".a { color: red; }")
                   (".a { width: ca\\6c c|; }" "calc()" ".a { width: calc(); }")
