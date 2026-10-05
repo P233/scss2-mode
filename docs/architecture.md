@@ -149,7 +149,13 @@ for ambiguous bare words, derived from sibling nodes rather than remembered
 typing state or a property catalog. Explicit selector prefixes, pseudo chains
 and leading combinators on the following line retain their selector role, as
 do adjacent selector lines without that preceding declaration. The syntax tree
-and highlighting are unchanged.
+and highlighting are unchanged. A declaration prefix may contain bracket raw
+values with blanks, such as `p[1px 2px]`, and Sass variables glued to the
+abbreviation, such as `p$a$b$c`. A bracket group with `=` before any
+string, call or nested bracket keeps the selector role (`a[title='x']`),
+because attribute selectors put their operator first. Strings, calls and
+nested brackets balance inside the group, so `=` or `]` there stays part of a
+raw value, as in `bgi[url(a.png?x=1)]`, `ct[']']` or `gtc[repeat(2, [a] 1fr)]`.
 
 Composition routes declaration prefixes to Emmet and other supported roles to
 semantic completion. The adapter's dynamic context binding only avoids analyzing

@@ -56,7 +56,7 @@ If your configuration explicitly selects a built-in mode, add these remappings a
 
 ## Everyday editing
 
-- **Expand declarations:** inside a rule such as `.card { }`, type `m10` and run `M-x scss2-expand` to insert `margin: 10px;`. You can also choose Emmet candidates through completion; point starts at the value without selecting it. SCSS supports forms such as `p$gutter`.
+- **Expand declarations:** inside a rule such as `.card { }`, type `m10` and run `M-x scss2-expand` to insert `margin: 10px;`. You can also choose Emmet candidates through completion; point starts at the value without selecting it. Bracket values may contain blanks, such as `p[1px 2px]` or `w[calc(100% - 2rem)]`, and SCSS supports forms such as `p$gutter` and `p$a$b$c`.
 - **Complete at point:** run `M-x completion-at-point`, or use a frontend such as Corfu. `M-x emmet2-complete` explicitly requests Emmet candidates.
 - **Complete values and syntax:** get at-rules, property values, CSS functions, pseudo-selectors, media queries, local import paths, and custom properties in `var()`. SCSS also offers visible variables, functions, mixins, named arguments, and direct local module members.
 - **Use fuzzy matching:** for example, `display: ib` offers `inline-block`. Matching is the `scss2` completion style, registered as the default for the `scss2` completion category; it also decodes CSS escapes and treats Sass `_` and `-` alike.

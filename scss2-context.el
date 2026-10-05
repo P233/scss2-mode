@@ -137,6 +137,32 @@ on the following line keeps the selector role."
            (forward-comment (point-max))
            (not (memq (char-after) '(?> ?+ ?~ ?| ?,)))))))
 
+(defun scss2-context--abbreviation-p (text delimiters)
+  "Whether TEXT is one declaration abbreviation on one line.
+Outside bracket groups, the characters in the list DELIMITERS end it.
+Bracket raw values may hold blanks, strings, calls and nested brackets, and
+an unclosed final group is still being typed.  Attribute selectors put their
+operator first, so `=' before any string, call or nested bracket in a group
+keeps the selector role."
+  (let (closers quote escaped raw)
+    (and (string-match-p "\\`[[:alpha:]_-]" text)
+         (cl-loop
+          for char across text
+          always (cond
+                  ((eq char ?\n) nil)
+                  (escaped (setq escaped nil) t)
+                  (quote (cond ((eq char ?\\) (setq escaped t))
+                               ((eq char quote) (setq quote nil)))
+                         t)
+                  ((and (null closers) (eq char ?\[)) (setq closers (list ?\]) raw nil) t)
+                  ((null closers) (not (or (eq char ?\]) (memq char delimiters))))
+                  ((eq char (car closers)) (pop closers) t)
+                  ((memq char '(?\" ?')) (setq quote char raw t))
+                  ((memq char '(?\( ?\[))
+                   (push (if (eq char ?\() ?\) ?\]) closers)
+                   (setq raw t))
+                  (t (or raw (not (eq char ?=)))))))))
+
 (defun scss2-context--declaration-shaped-p (selectors)
   "Whether SELECTORS absorbed an unfinished declaration at point.
 A pseudo-class has no blank after its colon, so `name: ' inside a selector
@@ -155,9 +181,11 @@ pseudo chains and selector continuations keep their selector role."
                       (end-of-line)
                       (looking-at "\r?\n[ \t]*\r?\n"))
                     (scss2-context--follows-declaration-p selectors))
-                (string-match-p "\\`[[:alpha:]_-][^ \t\r\n:;{}]*[ \t\r]*\\'"
-                                (buffer-substring-no-properties
-                                 (treesit-node-start selectors) (line-end-position)))
+                (scss2-context--abbreviation-p
+                 (string-trim-right (buffer-substring-no-properties
+                                     (treesit-node-start selectors) (line-end-position))
+                                    "[ \t\r]+")
+                 '(?\s ?\t ?\r ?: ?\; ?{ ?}))
                 (not (scss2-context--explicit-selector-p selectors (line-end-position)))
                 (scss2--declaration-body-p (scss2-context--block-owner selectors))))))
 
@@ -432,7 +460,9 @@ recognized selector, literal or declaration owns its complete syntax."
      ((and sass
            (string-match-p "\\`@include[ \t\n]+\\(?:[[:alnum:]_-]+\\.\\)?[[:alnum:]_-]*\\'" prefix))
       (scss2-context--context 'mixin beginning ending :module module))
-     ((and sass (eq (char-after beginning) ?$))
+     ((and sass (eq (char-after beginning) ?$)
+           ;; A `$' glued to a name, as in p$a$b, continues an abbreviation.
+           (not (string-match-p "[[:alnum:]]" (string (or (char-before beginning) ?\s)))))
       (scss2-context--context 'variable beginning ending :module module))
      ((and sass module)
       (scss2-context--context
@@ -506,7 +536,7 @@ recognized selector, literal or declaration owns its complete syntax."
      ((and (scss2--declaration-body-p owner)
            (not (string-match-p "\\`[.#&%>+~]" prefix))
            (or (string-match-p "\\`[[:alnum:]_-]*\\'" prefix)
-               (string-match-p "\\`[[:alpha:]_-][^ \t\n;{}]*\\'" prefix)))
+               (scss2-context--abbreviation-p prefix '(?\s ?\t ?\; ?{ ?}))))
       (scss2-context--context 'property beginning ending
                               :at-rule (scss2--directive owner) :start start))
      ((string-prefix-p "@" prefix) nil)

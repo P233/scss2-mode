@@ -16,6 +16,15 @@
                   ("@import 'the│';" path nil)
                   (".a { --raw: { nested: x│ }; }" property-value "--raw")
                   (".a { color /* x */: re│d; }" property-value "color")
+                  (".a { p[1px 2px]│ }" property nil)
+                  (".a { a[title='x']│ }" selector nil)
+                  (".a { a[x='(']│ }" selector nil)
+                  (".a { bgi[url(a.png?x=1)]│ }" property nil)
+                  (".a { ct['a=b']│ }" property nil)
+                  ;; Strings, calls and nested brackets in a bracket value balance their own `]'.
+                  (".a { ct[']']│ }" property nil)
+                  (".a { gtc[[a] 1fr]│ }" property nil)
+                  (".a { ct['x'] b│ }" selector nil)
                   ;; Without auto-pairing, unclosed calls and groups are the typing state.
                   (".a { color: var(--to│; }" custom-property "color")
                   (".a {\n  color: var(--to│\n  top: 0;\n}" custom-property "color")
@@ -117,7 +126,9 @@
 (ert-deftest scss2-context-declaration-before-a-separated-nested-rule ()
   (dolist (mode '(css2-mode scss2-mode))
     (dolist (input '("o" "opacity" "o." "o.5" "m-" "m-.5" "c#fff" "m10+p20" "m10,p20"
-                    "p[1px]" "w[calc(100%-2rem)]" "ct['foo.bar']" "ct['>']"))
+                    "p[1px]" "p[1px 2px]" "w[calc(100% - 2rem)]" "ff['Open Sans']"
+                    "ct['foo.bar']" "ct['>']" "ct['a=b']" "bgi[url(a.png?x=1)]"
+                    "ct[']']" "bgi[url(a]b.png)]" "gtc[repeat(2, [a] 1fr)]"))
       (scss2-test-with-buffer mode
           (concat ".appShell { overflow: hidden; " input
                   "│\n\n  &[data-is-resizing] { cursor: col-resize; }\n}")
@@ -131,7 +142,9 @@
 (ert-deftest scss2-context-declaration-before-an-adjacent-nested-rule ()
   (dolist (mode '(css2-mode scss2-mode))
     (dolist (input '("m" "m10" "display" "o.5" "m-.5" "c#fff" "m10+p20" "m10,p20"
-                    "p[1px]" "w[calc(100%-2rem)]" "ct['foo.bar']" "ct['>']"))
+                    "p[1px]" "p[1px 2px]" "w[calc(100% - 2rem)]" "ff['Open Sans']"
+                    "ct['foo.bar']" "ct['>']" "ct['a=b']" "bgi[url(a.png?x=1)]"
+                    "ct[']']" "bgi[url(a]b.png)]" "gtc[repeat(2, [a] 1fr)]"))
       (dolist (following '("&[data-is-resizing]" ".child" "button:hover"))
         (scss2-test-with-buffer mode
             (concat ".a {\n  text-align: center;\n  " input "│\n  " following " {}\n}")
@@ -147,10 +160,23 @@
   (scss2-test-with-buffer 'scss2-mode ".a { $gap: 1rem;\n  m│\n  &[x] {} }"
     (should (eq (plist-get (scss2-context-at-point) :role) 'property))))
 
+(ert-deftest scss2-context-glued-sass-variables-continue-an-abbreviation ()
+  (dolist (source '(".a {\n  p$a$b$c│\n}" ".a { color: red;\n  p$a$b$c│\n}"
+                    ".a { color: red;\n  p$a$b$c│\n  &[x] {} }"
+                    ".a { color: red; p$a$b$c│\n\n  &[x] {} }"))
+    (scss2-test-with-buffer 'scss2-mode source
+      (let ((context (scss2-context-at-point)))
+        (should (eq (plist-get context :role) 'property))
+        (should (equal (buffer-substring-no-properties (plist-get context :start) (point))
+                       "p$a$b$c")))))
+  (dolist (source '(".a { color: $a│; }" ".a { color: -$a│; }" ".a { color: #{$a│}; }"))
+    (scss2-test-with-buffer 'scss2-mode source
+      (should (eq (plist-get (scss2-context-at-point) :role) 'variable)))))
+
 (ert-deftest scss2-context-adjacent-rule-recovery-preserves-selector-syntax ()
   (dolist (mode '(css2-mode scss2-mode))
-    (dolist (selector '(".card" "#main" "&" "a[href]" "div.card" "div.éclair"
-                        "div.\\61" "svg|path" "div>span" "div~span"))
+    (dolist (selector '(".card" "#main" "&" "a[href]" "a[title='x']" "a[x='(']" "div.card"
+                        "div.éclair" "div.\\61" "svg|path" "div>span" "div~span"))
       (dolist (position '(1 nil))
         (let ((offset (or position (length selector))))
           (scss2-test-with-buffer mode
@@ -204,8 +230,8 @@
 
 (ert-deftest scss2-context-separated-rule-recovery-preserves-compound-selectors ()
   (dolist (mode '(css2-mode scss2-mode))
-    (dolist (selector '("a[href]" "div.card" "div.éclair" "div.🌟" "div._card"
-                        "div.-card" "div.\\61" "svg|path" "div>span" "div~span"))
+    (dolist (selector '("a[href]" "a[title='x']" "a[x='(']" "div.card" "div.éclair" "div.🌟"
+                        "div._card" "div.-card" "div.\\61" "svg|path" "div>span" "div~span"))
       (dolist (position '(1 nil))
         (let ((offset (or position (length selector))))
           (scss2-test-with-buffer mode
