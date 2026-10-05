@@ -40,7 +40,8 @@
       (undo-only 1)
       (should (equal (buffer-string) ".a { display: ib; }")))))
 
-(ert-deftest scss2-frontends-company-function-insertion-enters-parentheses ()
+(ert-deftest scss2-frontends-company-function-insertion-stays-after-the-call ()
+  ;; Company reports `exact' on acceptance; emmet2 enters a call only for `finished'.
   (dolist (mode '(css2-mode scss2-mode))
     (scss2-frontends--with mode "width: cal"
       (company-begin-backend 'company-capf)
@@ -48,7 +49,7 @@
       (should company-selection)
       (company-complete-selection)
       (should (equal (buffer-string) ".a { width: calc(); }"))
-      (should (looking-at ");")))))
+      (should (looking-at ";")))))
 
 (ert-deftest scss2-frontends-company-emmet-declaration-insertion ()
   (dolist (mode '(css2-mode scss2-mode))
