@@ -34,7 +34,7 @@
                  (string-match-p "\\`[0-9a-f]\\{64\\}\\'" identity))
       (error "Invalid bundled scss2-mode grammar manifest"))
     identity)
-  "Content identity of the bundled grammar and query snapshot.")
+  "Content identity of the bundled native grammar sources.")
 
 (defcustom scss2-grammar-cache-directory
   (expand-file-name "tree-sitter/scss2-mode/" user-emacs-directory)
@@ -44,10 +44,6 @@ directory can be read-only.  Compilation runs the CC environment variable,
 split like a shell command such as \"ccache cc\", or cc when CC is unset."
   :type 'directory
   :group 'scss2)
-
-(defvar scss2-grammar--verified-libraries nil
-  "Native library files that have loaded since they were last built.
-Each entry is an absolute file name verified in this Emacs session.")
 
 (defun scss2-grammar--library-base ()
   "Return the private library base name for the bundled source."
@@ -62,12 +58,15 @@ SCSS grammars or a different version of this package."
     (error "Unknown stylesheet dialect: %S" dialect))
   (let ((language
          (intern (format "scss2-%s-%s" dialect
-                         (substring scss2-grammar--content-id 0 16)))))
-    ;; Emacs consults the path again when creating a parser, so the mapping
-    ;; retains the absolute base path rather than a temporary search path.
+                         (substring scss2-grammar--content-id 0 16))))
+        (base (expand-file-name (scss2-grammar--library-base)
+                                (scss2-grammar--cache-path))))
+    ;; Parsers reload through this persistent mapping; name the file where Emacs looks first.
     (setf (alist-get language treesit-load-name-override-list)
-          (list (expand-file-name (scss2-grammar--library-base)
-                                  (scss2-grammar--cache-path))
+          (list (if treesit-extra-load-path
+                    base
+                  (file-relative-name
+                   base (expand-file-name "tree-sitter/" user-emacs-directory)))
                 (if (eq dialect 'css)
                     "tree_sitter_stylesheet_css"
                   "tree_sitter_scss")))
@@ -83,10 +82,8 @@ SCSS grammars or a different version of this package."
   "Return the cached native library file name."
   (expand-file-name
    (concat (scss2-grammar--library-base)
-           (pcase system-type
-             ('darwin ".dylib")
-             ('windows-nt ".dll")
-             (_ ".so")))
+           ;; Emacs tries .so before .dylib on macOS.
+           (if (eq system-type 'windows-nt) ".dll" ".so"))
    (scss2-grammar--cache-path)))
 
 (defun scss2-grammar--library-present-p (library)
@@ -140,24 +137,19 @@ SCSS grammars or a different version of this package."
 
 (defun scss2-grammar-ensure (dialect)
   "Build and load the bundled grammar for DIALECT, then return its language.
-Existing native output is reused.  Each library file is loaded to verify it
-once per session, and again after it is rebuilt.  A failed build leaves no
-published library; a library that cannot load reports the runtime's
-diagnostic."
+Existing native output is reused and loaded to verify it.  A failed build
+leaves no published library; a library that cannot load reports the
+runtime's diagnostic."
   (unless (treesit-available-p)
     (user-error "scss2-mode requires Emacs built with Tree-sitter support"))
   (let* ((language (scss2-grammar-language dialect))
          (library (scss2-grammar--library-file)))
     (unless (scss2-grammar--library-present-p library)
-      (setq scss2-grammar--verified-libraries
-            (delete library scss2-grammar--verified-libraries))
       (scss2-grammar--compile library))
-    (unless (member library scss2-grammar--verified-libraries)
-      (let ((availability (treesit-language-available-p language t)))
-        (unless (car availability)
-          (user-error "Cannot load the bundled scss2-mode grammar from %s: %S"
-                      library (cdr availability))))
-      (push library scss2-grammar--verified-libraries))
+    (let ((availability (treesit-language-available-p language t)))
+      (unless (car availability)
+        (user-error "Cannot load the bundled scss2-mode grammar from %s: %S"
+                    library (cdr availability))))
     language))
 
 (provide 'scss2-grammar)

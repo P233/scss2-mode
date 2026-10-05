@@ -8,6 +8,14 @@
 (require 'cl-lib)
 (require 'scss2-grammar)
 
+(defun scss2-grammar-test--first-candidate (language)
+  "Return the first file Emacs tries to load for LANGUAGE."
+  ;; Emacs searches extra paths, then the user directory, and tries the last suffix first.
+  (expand-file-name (concat (cadr (assq language treesit-load-name-override-list))
+                            (car (last dynamic-library-suffixes)))
+                    (or (car treesit-extra-load-path)
+                        (expand-file-name "tree-sitter/" user-emacs-directory))))
+
 (ert-deftest scss2-grammar-language-identities-are-private-and-dialect-specific ()
   (let ((treesit-load-name-override-list nil))
     (let ((css (scss2-grammar-language 'css))
@@ -16,15 +24,27 @@
       (should-not (memq scss '(scss css)))
       (should (equal (cadr (assq css treesit-load-name-override-list))
                      (cadr (assq scss treesit-load-name-override-list))))
-      (should (file-name-absolute-p
-               (cadr (assq css treesit-load-name-override-list))))
+      (should (equal (scss2-grammar-test--first-candidate css)
+                     (scss2-grammar--library-file)))
       (should (equal (nth 2 (assq css treesit-load-name-override-list))
                      "tree_sitter_stylesheet_css"))
       (should (equal (nth 2 (assq scss treesit-load-name-override-list))
                      "tree_sitter_scss"))
       (let ((scss2-grammar-cache-directory temporary-file-directory))
         (scss2-grammar-language 'scss)
-        (should (= (length treesit-load-name-override-list) 2)))
+        (should (= (length treesit-load-name-override-list) 2))
+        (should (equal (scss2-grammar-test--first-candidate scss)
+                       (scss2-grammar--library-file))))
+      (let* ((user-emacs-directory (expand-file-name "scss2-user/" temporary-file-directory))
+             (scss2-grammar-cache-directory
+              (expand-file-name "tree-sitter/scss2-mode/" user-emacs-directory)))
+        (scss2-grammar-language 'scss)
+        (should (equal (scss2-grammar-test--first-candidate scss)
+                       (scss2-grammar--library-file)))
+        (let ((treesit-extra-load-path (list temporary-file-directory)))
+          (scss2-grammar-language 'scss)
+          (should (equal (scss2-grammar-test--first-candidate scss)
+                         (scss2-grammar--library-file)))))
       (let ((scss2-grammar--content-id (make-string 64 ?a)))
         (should-not (eq scss (scss2-grammar-language 'scss)))))
     (should-error (scss2-grammar-language 'sass))))
@@ -141,41 +161,33 @@
                          "-m64\n")))
       (delete-directory directory t))))
 
-(ert-deftest scss2-grammar-verifies-each-library-once-until-rebuilt ()
+(ert-deftest scss2-grammar-verifies-the-library-on-each-request ()
   (let ((scss2-grammar-cache-directory (make-temp-file "scss2-verify-" t))
         (treesit-load-name-override-list (copy-tree treesit-load-name-override-list))
-        (scss2-grammar--verified-libraries nil)
-        (present nil) (loadable nil) (builds 0) (checks 0))
+        (loadable nil) (checks 0))
     (unwind-protect
         (cl-letf (((symbol-function 'treesit-available-p) (lambda () t))
-                  ((symbol-function 'scss2-grammar--library-present-p) (lambda (_) present))
-                  ((symbol-function 'scss2-grammar--compile)
-                   (lambda (_) (cl-incf builds) (setq present t)))
+                  ((symbol-function 'scss2-grammar--library-present-p) #'always)
                   ((symbol-function 'treesit-language-available-p)
                    (lambda (_language _detail)
                      (cl-incf checks)
                      (if loadable '(t) '(nil fixture-load-error)))))
-          ;; A library that cannot load is checked again on the next request.
-          (dotimes (_ 2)
-            (let ((failure (should-error (scss2-grammar-ensure 'scss) :type 'user-error)))
-              (should (string-match-p "fixture-load-error" (error-message-string failure)))))
-          (should (equal (list builds checks) '(1 2)))
+          (let ((failure (should-error (scss2-grammar-ensure 'scss) :type 'user-error)))
+            (should (string-match-p "fixture-load-error" (error-message-string failure))))
           (setq loadable t)
-          (dolist (dialect '(scss css scss css))
+          (dolist (dialect '(scss css))
             (scss2-grammar-ensure dialect))
-          (should (equal (list builds checks) '(1 3)))
-          ;; A rebuilt library must load again before it counts as verified.
-          (setq present nil)
-          (dotimes (_ 2) (scss2-grammar-ensure 'css))
-          (should (equal (list builds checks) '(2 4)))
-          ;; Verification is per library path, such as another cache directory's.
-          (let ((scss2-grammar-cache-directory
-                 (expand-file-name "other/" scss2-grammar-cache-directory)))
-            (scss2-grammar-ensure 'scss))
-          (should (equal (list builds checks) '(2 5)))
-          (scss2-grammar-ensure 'css)
-          (should (equal (list builds checks) '(2 5))))
+          (should (= checks 3)))
       (delete-directory scss2-grammar-cache-directory t))))
+
+(ert-deftest scss2-grammar-loads-beside-other-search-directories ()
+  (let ((treesit-load-name-override-list (copy-tree treesit-load-name-override-list))
+        (user-emacs-directory (file-name-as-directory (make-temp-file "scss2-user-" t))))
+    (unwind-protect
+        (dolist (treesit-extra-load-path (list nil (list user-emacs-directory)))
+          (with-temp-buffer
+            (should (treesit-parser-create (scss2-grammar-ensure 'scss)))))
+      (delete-directory user-emacs-directory t))))
 
 (ert-deftest scss2-grammar-cold-build-loads-both-dialects-and-warm-cache-reuses ()
   ;; A new Emacs process cannot pass by reusing a language loaded by the suite.

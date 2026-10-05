@@ -42,9 +42,9 @@ This produces a scss2-mode package, an emmet2-mode package, and the archive inde
 
 Open a `.scss` or `.css` file; Emacs selects the corresponding mode.
 
-The included `parser.c` is **generated C source, not a precompiled library**. On first use, Emacs automatically compiles it and `scanner.c` into a native library (`.dylib` on macOS, `.so` on Linux). You need the compiler, but **you do not run compilation commands yourself** or install the Tree-sitter CLI.
+The included `parser.c` is **generated C source, not a precompiled library**. On first use, Emacs automatically compiles it and `scanner.c` into a native library (`.so` on macOS and Linux). You need the compiler, but **you do not run compilation commands yourself** or install the Tree-sitter CLI.
 
-Later buffers and Emacs sessions reuse the cached library. A changed parser snapshot or platform triggers a new build. This package does not currently ship prebuilt native libraries.
+Later buffers and Emacs sessions reuse the cached library. Changed parser C sources or another platform trigger a new build; an update that changes only highlighting queries reuses the cached library. This package does not currently ship prebuilt native libraries.
 
 If your configuration explicitly selects a built-in mode, add these remappings and reopen the file:
 

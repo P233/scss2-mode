@@ -3,7 +3,7 @@
 The document is an Emacs buffer. Tree-sitter, lexical syntax, completion and
 structural targets are readings of that buffer, not independently synchronized
 models. The only persistent derived artifact is a native parser library keyed by
-the bundled snapshot and platform.
+the bundled parser sources (`src/`) and platform.
 
 ## Dependencies and responsibilities
 
@@ -27,7 +27,7 @@ flowchart TD
 
 | Library | Responsibility and interface | State / excluded dependencies |
 | --- | --- | --- |
-| `scss2-grammar` | `scss2-grammar-ensure` loads a private dialect identity; compilation and disk cache | Owns content/platform identity, native artifacts and per-session load verification; no editor feature dependencies |
+| `scss2-grammar` | `scss2-grammar-ensure` loads a private dialect identity; compilation and disk cache | Owns native-source/platform identity, native artifacts and load verification; no editor feature dependencies |
 | `scss2-syntax` | `scss2-syntax-setup` initializes the parser and lexical properties; shared node/identity/range readers | Owns buffer dialect, loaded language and session-compiled internal queries; no completion, editing, host or Emmet dependency |
 | `scss2-context` | `scss2-context-at-point` returns role, bounds and role-specific facts | Request-local reads only; no catalog, module I/O, host or Emmet dependency |
 | `scss2-completion` | `scss2-completion-for-context` consumes explicit context plus the current parsed buffer; supplies candidates and name identity to `emmet2-completion-capf` | Tables are session-local; no classifier, host mode or Emmet adapter dependency |
@@ -107,7 +107,7 @@ palette without a mode-specific color scheme or theme dependency.
 The buffer's grammar identity stays fixed even if loading a newer package changes
 the global snapshot identity. Features read that buffer identity. Compiled
 internal queries are session data keyed by that immutable identity and the query
-form; each native library path is verified to load once per session. Local
+form. Every grammar request loads its native library to verify it. Local
 module completion reuses a matching parser in an open buffer, including unsaved
 edits; otherwise it parses that authoritative text, or a disk file, in a
 temporary buffer. Temporary parsers die with their buffers. There is no module
@@ -225,7 +225,7 @@ an integration contract exercising both on the same unclosed callable.
 - Semantic tables do not classify point or call the abbreviation adapter.
 - Open-buffer module text wins over disk; loaded grammar generation is preserved.
 - Targets and context are transient; no workers or synchronization. The only
-  session caches are compiled internal queries and verified library paths.
+  session cache is compiled internal queries.
 
 ```sh
 make test-core
@@ -262,8 +262,11 @@ remain Emacs-owned. Existing batch workloads cover 0/1,000 declarations, open
 modules with 100/1,000/5,000 symbols, a 73 KB fixture and its 729 KB repetition,
 512 nested query levels, 4,096 query comments and a numbers-heavy document.
 
-Grammar library verification and internal query compilation load the native
-language, so they run once per session rather than per buffer. Emmet's CSS
+Internal query compilation loads the native language, so it runs once per
+session rather than per buffer. Grammar verification loads the library on every
+request. The library is named `.so` and registered for the first file Emacs
+tries: relative to `user-emacs-directory`'s `tree-sitter/`, or absolute when
+`treesit-extra-load-path` is set, so a load takes about 0.1 ms. Emmet's CSS
 documentation data loads on the first semantic completion that needs it.
 
 Compare byte-compiled copies with the same parser, Emmet, inputs and GC
@@ -599,9 +602,14 @@ its statement's header; completion finishes unfinished loop ranges, variable
 values and loop bindings.
 
 The grammar cache rejects empty or missing compiler output before publishing it
-and rebuilds existing empty caches. Release packaging requires a clean parser
-manifest. CI requires the repository variable `SCSS2_EMMET2_REVISION`, the full
-SHA of a published compatible Emmet2 commit.
+and rebuilds existing empty caches. Its identity hashes only the native build
+inputs under `src/`, so a query or fixture update reuses the built library. `CC`
+is split like a shell command, and the compiler runs in the cache directory.
+Without `treesit-extra-load-path`, the library mapping is relative to
+`user-emacs-directory` as of the latest grammar request; if that variable changes
+afterwards, the grammar cannot load until a stylesheet mode is activated again.
+Release packaging requires a clean parser manifest. CI checks out the Emmet2
+commit pinned in `.github/workflows/check.yml`.
 
 Company tests expose one dependency limit: Company's `exact` acceptance status
 does not enter semantic function parentheses; Emmet2 acts only on `finished`

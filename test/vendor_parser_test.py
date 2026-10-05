@@ -42,6 +42,12 @@ class VendorImportTest(unittest.TestCase):
             self.assertEqual(list(destination.iterdir()), [destination / "existing"])
             self.assertEqual(list(destination.parent.iterdir()), [destination])
 
+    def test_content_id_changes_only_with_native_build_inputs(self):
+        hashes = {name: "previous" for name in VENDOR.FILES}
+        for name in VENDOR.FILES:
+            changed = VENDOR.content_id({**hashes, name: "changed"}) != VENDOR.content_id(hashes)
+            self.assertEqual(changed, name.startswith("src/"), name)
+
 
 if __name__ == "__main__":
     unittest.main()

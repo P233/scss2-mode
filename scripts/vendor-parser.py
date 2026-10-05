@@ -28,7 +28,9 @@ def digest(data):
 
 
 def content_id(files):
-    return digest("".join(f"{name}\0{value}\n" for name, value in sorted(files.items())).encode())
+    # The native build reads only src/; queries and fixtures load from the package.
+    native = sorted((name, value) for name, value in files.items() if name.startswith("src/"))
+    return digest("".join(f"{name}\0{value}\n" for name, value in native).encode())
 
 
 def verify(release=False):
