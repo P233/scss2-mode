@@ -400,6 +400,16 @@ BEGINNING and ENDING bound the identifier being completed."
          (t (scss2-context--context 'media-keyword beginning ending
                                     :query language)))))))
 
+(defun scss2-context--argument-slot-p (opening beginning)
+  "Whether BEGINNING starts an argument of the list opened at OPENING.
+Only there can a word name a parameter; elsewhere it is part of a value."
+  (save-excursion
+    (goto-char beginning)
+    (forward-comment (- (point)))
+    (pcase (char-before)
+      (?\( (= (1- (point)) opening))
+      (?, (eql (nth 1 (syntax-ppss (1- (point)))) opening)))))
+
 (defun scss2-context--include-context (node beginning ending)
   "Describe NODE's include name or argument slot without crossing nested calls.
 BEGINNING and ENDING bound the identifier being completed."
@@ -422,11 +432,15 @@ BEGINNING and ENDING bound the identifier being completed."
                           ;; error until its first value is typed.
                           (and incomplete-colon
                                (equal (treesit-node-text incomplete-colon t) ":"))
-                          (and nested (not (treesit-node-eq nested arguments))))))
-          (scss2-context--context
-           (if value 'property-value 'argument) beginning ending
-           :mixin (let ((name (scss2--identifier-name name)))
-                    (if module (concat (scss2--identifier-name module) "." name) name)))))))))
+                          (and nested (not (treesit-node-eq nested arguments)))
+                          (not (scss2-context--argument-slot-p
+                                (treesit-node-start arguments) beginning))))
+               (mixin (scss2--identifier-name name)))
+          ;; Named values come from this stylesheet; only parameter names come from the module.
+          (if value
+              (scss2-context--context 'property-value beginning ending :mixin mixin)
+            (scss2-context--context 'argument beginning ending
+                                    :mixin mixin :module (scss2--identifier-name module)))))))))
 
 (defun scss2-context--classify (node state interpolation)
   "Classify NODE at point, using STATE and INTERPOLATION for lexical boundaries.
@@ -483,11 +497,14 @@ recognized selector, literal or declaration owns its complete syntax."
       (plist-put (scss2-context--declaration-context declaration beginning ending)
                  :at-rule (scss2--directive owner)))
      ;; Gaps and unfinished input have no complete node to establish their role.
-     ((and sass (string-match "\\`@include[ \t\n]+\\([[:alnum:]_.-]+\\)([^)]*\\'" prefix))
-      (let ((mixin (match-string 1 prefix)))
-        (scss2-context--context
-         (if (string-match-p ":[^,]*\\'" prefix) 'property-value 'argument)
-         beginning ending :mixin mixin)))
+     ((and sass (string-match "\\`@include[ \t\n]+\\(?:\\([[:alnum:]_.-]+\\)\\.\\)?\\([[:alnum:]_-]+\\)([^)]*\\'"
+                              prefix))
+      (let ((module (match-string 1 prefix)) (mixin (match-string 2 prefix))
+            (opening (+ start (match-end 2))))
+        (if (or (string-match-p ":[^,]*\\'" prefix)
+                (not (scss2-context--argument-slot-p opening beginning)))
+            (scss2-context--context 'property-value beginning ending :mixin mixin)
+          (scss2-context--context 'argument beginning ending :mixin mixin :module module))))
      ((string-match "\\`@\\(media\\|container\\|supports\\)\\_>" prefix)
       (let ((directive (downcase (match-string 1 prefix))))
         (cond

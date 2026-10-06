@@ -603,9 +603,19 @@
                          '(("@use 'sass:math'; .a { width: math.|; }" decline)
                            ("@use 'sass:math'; .a { width: math.$|; }" decline)
                            ("@use 'sass:math'; .a { @include math.|; }" decline)
+                           ("@use 'sass:meta'; .a { @include meta.load-css($|); }" decline)
+                           ("@use 'pkg:ui' as ui; .a { @include ui.button($s|); }" decline)
+                           ("@use 'pkg:ui' as ui;\n.a {\n  @include ui.button(|" decline)
+                           ;; Values come from this stylesheet, not from the module.
+                           ("@use 'pkg:ui' as ui; .a { @include ui.button($size: inh|); }" ("inherit"))
+                           ("@use 'pkg:ui' as ui; $gap: 1; .a { @include ui.button(1 + $g|); }" ("$gap"))
+                           ("@use 'pkg:ui' as ui; $gap: 1; .a { @include ui.button([$g|]); }" ("$gap"))
+                           ("@use 'pkg:ui' as ui; $gap: 1; .a { @include ui.button((a: $g|)); }" ("$gap"))
+                           ("@use 'pkg:ui' as ui; $gap: 1; .a { @include ui.button(#{$g|}); }" ("$gap"))
                            ;; Re-exports are not followed; a local module stays owned.
                            ("@use 'forward'; .a { color: forward.$|; }" nil)
                            ("@use 'forward'; .a { @include forward.|; }" nil)
+                           ("@use 'forward'; .a { @include forward.paint($|); }" nil)
                            ("@use \"sass:|\";" decline)
                            ("@use \"sass:ma|\";" decline)
                            ("@use \"missing/directory/|\";" decline)
@@ -622,7 +632,11 @@
                       (should-not capf)
                     ;; An owned module or directory stays exclusive without a match.
                     (should (eq (plist-get (nthcdr 3 capf) :exclusive) t))
-                    (should (equal (scss2-completion-test--names) expected))))))))
+                    (should (equal (scss2-completion-test--names) expected)))))))
+          ;; Unclosed arguments keep their values local too.
+          (scss2-completion-test--with 'scss "@use 'pkg:ui' as ui; $gap: 1;\n.a {\n  @include ui.button(1 + |"
+            (should (eq (plist-get (scss2-context-at-point) :role) 'property-value))
+            (should (member "$gap" (scss2-completion-test--names)))))
       (delete-directory directory t))))
 
 (ert-deftest scss2-completion-candidates-read-font-lock-view ()
@@ -710,6 +724,39 @@
       "@mixin paint($local) {} @include theme.paint(|);"
     (should (eq (plist-get (scss2-context-at-point) :role) 'argument))
     (should-not (member "$local: " (scss2-completion-test--names)))))
+
+(ert-deftest scss2-completion-module-mixins-offer-their-parameters ()
+  (let ((directory (make-temp-file "scss2-module-parameters-" t)))
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "_theme.scss" directory)
+            (insert "@mixin card($remote, $tone: 1) {}\n@mixin _hidden($secret) {}"))
+          (with-temp-file (expand-file-name "_tokens.scss" directory)
+            (insert "$breakpoint-md: 768px;"))
+          (pcase-dolist (`(,source ,module ,expected)
+                         '(("@use 'theme'; .a { @include theme.card($|); }" "theme" ("$remote: " "$tone: "))
+                           ("@use 'theme' as t; .a { @include t.card(1, $t|); }" "t" ("$tone: "))
+                           ("@use 'theme'; .a { @include th\\65 me.c\\61 rd($r|); }" "theme" ("$remote: "))
+                           ;; A local mixin of the same name does not answer for the module.
+                           ("@use 'theme'; @mixin card($local) {} .a { @include theme.card($|); }"
+                            "theme" ("$remote: " "$tone: "))
+                           ("@use 'theme'; .a { @include theme._hidden($|); }" "theme" nil)
+                           ;; Another module's member is a value, not a parameter name.
+                           ("@use 'theme'; @use 'tokens'; .a { @include theme.card(tokens.$br|); }"
+                            "tokens" ("$breakpoint-md"))
+                           ("@use 'tokens'; @mixin up($breakpoint) {} .a { @include up(1, tokens.$br|); }"
+                            "tokens" ("$breakpoint-md"))))
+            (scss2-completion-test--with 'scss source
+              (setq buffer-file-name (expand-file-name "main.scss" directory))
+              (ert-info (source)
+                (should (equal (plist-get (scss2-context-at-point) :module) module))
+                (should (equal (sort (scss2-completion-test--names) #'string<) expected)))))
+          ;; Unclosed input recovers the slot from the statement text.
+          (scss2-completion-test--with 'scss "@use 'theme';\n.a {\n  @include theme.card(|"
+            (setq buffer-file-name (expand-file-name "main.scss" directory))
+            (should (equal (plist-get (scss2-context-at-point) :module) "theme"))
+            (should (member "$remote: " (scss2-completion-test--names)))))
+      (delete-directory directory t))))
 
 (ert-deftest scss2-completion-query-nesting-preserves-role ()
   (dolist (source '("@supports selector(:ho|) {}"
