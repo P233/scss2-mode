@@ -646,6 +646,17 @@
                   ((scss2-mode) ".a { content: \"a #{$b│} c\"; }"
                    ".a { content: \"a #{│} c\"; }" "$b")
                   ((scss2-mode) ".a { width: #{\"x│y\"}; }" ".a { width: #{\"│\"}; }" "xy")
+                  ((scss2-mode) ".a { width: #{ma│th.div($a, 2)}; }"
+                   ".a { width: #{│}; }" "math.div($a, 2)")
+                  ((scss2-mode) ".a { content: \"#{map-g│et($m, k)}\"; }"
+                   ".a { content: \"#{│}\"; }" "map-get($m, k)")
+                  ((scss2-mode) ".a { b: #{i│f($c, 1px, 2px)}; }" ".a { b: #{│}; }" "if($c, 1px, 2px)")
+                  ;; From its opening parenthesis on, a call selects its arguments.
+                  ((scss2-mode) ".a { width: #{math.div│($a, 2)}; }"
+                   ".a { width: #{math.div(│)}; }" "$a, 2")
+                  ((scss2-mode) ".a { b: #{│#{$a}}; }" ".a { b: #{#{│}}; }" "$a")
+                  ;; Sass evaluates interpolation in loud comments.
+                  ((scss2-mode) ".a { /* #{f│n(1)} */ }" ".a { /* #{│} */ }" "fn(1)")
                   ((scss2-mode) "@use \"sass:m│ath\" as m;" "@use \"│\" as m;" "sass:math")
                   ((scss2-mode) "@debug \"v│: #{$a}\";" "@debug \"│\";" "v: #{$a}")
                   ((scss2-mode) "@if $a == \"f│oo\" { x: 1; }"

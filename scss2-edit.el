@@ -229,6 +229,12 @@ For map NODE, use its entry that ends at point, before a comma or `)'."
              ;; Unsupported leaf statements never empty their parent block.
              (setq node nil))
             ((scss2--comment-p node) (setq node nil))
+            ;; Inside interpolation, a call's name selects the interpolation.
+            ((and (equal (treesit-node-type (treesit-node-parent node)) "interpolation")
+                  (when-let* ((interior (scss2--interior node)))
+                    (and (eq (char-before (car interior)) ?\()
+                         (< (point) (1- (car interior))))))
+             (setq node (treesit-node-parent node)))
             ((setq bounds (scss2--map-entry-value node))
              (setq owner (or statement node)))
             ((scss2--interior node)
