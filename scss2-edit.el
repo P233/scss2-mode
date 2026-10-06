@@ -160,22 +160,25 @@ Only explicit block selection may cross a leaf statement boundary."
    (scss2--with-font-lock-view (scss2--resolve-target-1 kind))))
 
 (defun scss2--interior (node)
-  "Return NODE's balanced interior, using a call's argument container."
+  "Return NODE's bracketed or quoted interior, using a call's argument container."
   (let* ((children (scss2--children node))
          (opening (cl-find-if
                    (lambda (child)
-                     (or (member (treesit-node-type child) '("(" "[" "{" "#{"))
+                     (or (member (treesit-node-type child) '("(" "[" "{" "#{" "\"" "'"))
                          (and (equal (treesit-node-type node) "raw_group")
                               (equal (treesit-node-text child t) "#{"))))
                    children))
          (closing (car (last children))))
     (if opening
         (when (and closing
+                   ;; A lone quote in an ERROR node is both its first and last child.
+                   (not (treesit-node-eq opening closing))
                    (not (treesit-node-check opening 'missing))
                    (not (treesit-node-check closing 'missing))
                    (equal (treesit-node-type closing)
                           (pcase (treesit-node-text opening t)
-                            ("(" ")") ("[" "]") (_ "}"))))
+                            ("(" ")") ("[" "]") ((and (or "\"" "'") quotation) quotation)
+                            (_ "}"))))
           (cons (treesit-node-end opening) (treesit-node-start closing)))
       (when-let* ((arguments (scss2--child node "arguments")))
         (scss2--interior arguments)))))
@@ -379,6 +382,7 @@ With prefix BLOCK, kill the nearest complete structural block instead."
 ;;;###autoload
 (defun scss2-empty (&optional block)
   "Kill the nearest delimited interior, declaration value or if condition.
+Brackets, interpolation and string quotes delimit interiors.
 With prefix BLOCK, clear the nearest structural block's body."
   (interactive "P")
   (let ((target (scss2--content-target block)))

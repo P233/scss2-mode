@@ -272,11 +272,11 @@
       (scss2-kill)
       (should (equal (buffer-string) ".a { /* before */  /* after */ x: 1; }"))
       (should (equal (car kill-ring) "color: red !important;")))
-    (scss2-edit-test--buffer mode ".a { content: \"a │b\" !important; }"
+    (scss2-edit-test--buffer mode ".a { content: \"a b\" !imp│ortant; }"
       (scss2-empty)
       (should (equal (buffer-string) ".a { content: ; }"))
       (should (equal (car kill-ring) "\"a b\" !important")))
-    (scss2-edit-test--buffer mode ".a { content: \"│literal\"; }"
+    (scss2-edit-test--buffer mode ".a { con│tent: \"literal\"; }"
       (scss2-empty)
       (should (equal (buffer-string) ".a { content: ; }"))
       (should (equal (car kill-ring) "\"literal\"")))))
@@ -425,9 +425,9 @@
     (scss2-edit-test--unchanged #'scss2-kill)))
 
 (ert-deftest scss2-edit-narrowed-literals-keep-the-full-syntax-owner ()
-  (dolist (source '(".a { content: \".b { color: re│d; }\"; }"
-                    ".a { /* .b { color: re│d; } */ }"))
-    (scss2-edit-test--buffer 'css2-mode source
+  (dolist (case '((".a { content: \".b { color: re│d; }\"; }" . ".b { color: red; }")
+                  (".a { /* .b { color: re│d; } */ }")))
+    (scss2-edit-test--buffer 'css2-mode (car case)
       (let ((position (point)))
         (goto-char (point-min)) (search-forward ".b")
         (let ((begin (- (point) 2)))
@@ -436,9 +436,21 @@
         (goto-char position))
       (buffer-enable-undo)
       (setq buffer-undo-list nil)
-      (dolist (command '(scss2-kill scss2-empty scss2-copy scss2-mark scss2-duplicate))
+      (dolist (command (append '(scss2-kill scss2-copy scss2-mark scss2-duplicate)
+                               (unless (cdr case) '(scss2-empty))))
         (scss2-edit-test--unchanged command)
-        (should-not buffer-undo-list))))
+        (should-not buffer-undo-list))
+      ;; Empty targets the string's interior, which the restriction spans exactly.
+      (when (cdr case)
+        (scss2-empty)
+        (should (equal (buffer-string) ""))
+        (should (equal (car kill-ring) (cdr case))))))
+  (scss2-edit-test--buffer 'css2-mode ".a { content: \".b { color: re│d; }\"; }"
+    (let ((position (point)))
+      (goto-char (point-min)) (search-forward "color")
+      (narrow-to-region (- (point) 5) (progn (search-forward ";") (point)))
+      (goto-char position))
+    (scss2-edit-test--unchanged #'scss2-empty))
   (scss2-edit-test--buffer 'css2-mode ".before {} .a { color: re│d; } .after {}"
     (let ((position (point)))
       (goto-char (point-min)) (search-forward ".a ")
@@ -571,6 +583,59 @@
   (scss2-edit-test--buffer 'scss2-mode "$m: (a: 1, b: │2);"
     (scss2-empty)
     (should (equal (buffer-string) "$m: ();"))))
+
+(ert-deftest scss2-edit-empty-clears-string-and-interpolation-interiors ()
+  (dolist (case '(((css2-mode scss2-mode) ".a { content: \"a │b\" !important; }"
+                   ".a { content: \"│\" !important; }" "a b")
+                  ((css2-mode scss2-mode) ".a { content: '│lit\\'eral'; }"
+                   ".a { content: '│'; }" "lit\\'eral")
+                  ((css2-mode scss2-mode) ".a { content: \"literal│\"; }"
+                   ".a { content: \"│\"; }" "literal")
+                  ((css2-mode scss2-mode) ".a { content: │\"foo\"; }"
+                   ".a { content: \"│\"; }" "foo")
+                  ((css2-mode scss2-mode) ".a { content: \"foo\"│ \"x\"; }"
+                   ".a { content: \"│\" \"x\"; }" "foo")
+                  ((css2-mode scss2-mode) ".a { content: \"a\\\r\nb│c\"; }"
+                   ".a { content: \"│\"; }" "a\\\r\nbc")
+                  ((css2-mode scss2-mode) ".a { content: \"│\"; }"
+                   ".a { content: \"│\"; }" "previous kill")
+                  ((css2-mode scss2-mode) "@import \"fo│o\";" "@import \"│\";" "foo")
+                  ((css2-mode scss2-mode) "[data-x=\"f│oo\"] {}" "[data-x=\"│\"] {}" "foo")
+                  ((css2-mode scss2-mode) ".a { background: url(\"im│g.png\"); }"
+                   ".a { background: url(\"│\"); }" "img.png")
+                  ;; CSS has no interpolation, so `#{' is string text there.
+                  ((css2-mode) ".a { content: \"a #{b│} c\"; }"
+                   ".a { content: \"│\"; }" "a #{b} c")
+                  ((scss2-mode) ".a { content: \"a│ #{$b} c\"; }"
+                   ".a { content: \"│\"; }" "a #{$b} c")
+                  ((scss2-mode) ".a { content: \"a #{$b│} c\"; }"
+                   ".a { content: \"a #{│} c\"; }" "$b")
+                  ((scss2-mode) ".a { width: #{\"x│y\"}; }" ".a { width: #{\"│\"}; }" "xy")
+                  ((scss2-mode) "@use \"sass:m│ath\" as m;" "@use \"│\" as m;" "sass:math")
+                  ((scss2-mode) "@debug \"v│: #{$a}\";" "@debug \"│\";" "v: #{$a}")
+                  ((scss2-mode) "@if $a == \"f│oo\" { x: 1; }"
+                   "@if $a == \"│\" { x: 1; }" "foo")
+                  ((scss2-mode) ".a { width: │#{$a + 1}px; }"
+                   ".a { width: #{│}px; }" "$a + 1")
+                  ((scss2-mode) ".a-#{$b│} { x: 1; }" ".a-#{│} { x: 1; }" "$b")
+                  ((scss2-mode) ".a { #{$p│}-top: 1px; }" ".a { #{│}-top: 1px; }" "$p")
+                  ((scss2-mode) "@media #{$q│} { .a { x: 1; } }"
+                   "@media #{│} { .a { x: 1; } }" "$q")))
+    (dolist (mode (car case))
+      (scss2-edit-test--buffer mode (nth 1 case)
+        (scss2-empty)
+        (should (equal (concat (buffer-substring-no-properties (point-min) (point)) "│"
+                               (buffer-substring-no-properties (point) (point-max)))
+                       (nth 2 case)))
+        (should (equal (car kill-ring) (nth 3 case))))))
+  ;; Unterminated strings and a lone quote have no reliable interior.
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (case '((".a { content: \"ab│c\n}" . "This syntax is incomplete; no reliable edit range")
+                    ("$x: \"ab│" . "This syntax is incomplete; no reliable edit range")
+                    ("@media \"│" . "No stylesheet target here")))
+      (scss2-edit-test--buffer mode (car case)
+        (scss2-edit-test--unchanged #'scss2-empty)
+        (should (equal (cadr (should-error (scss2-empty) :type 'user-error)) (cdr case)))))))
 
 (ert-deftest scss2-edit-empty-if-condition-and-branch-body ()
   (dolist (case '(("@if $a │and $b { x: 1; } @else { x: 2; }"

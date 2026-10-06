@@ -402,7 +402,7 @@ COMMANDS default to the bindings of C-M-a and C-M-e."
                                       '((interpolation) @expression)))
     (goto-char (point-min)) (search-forward "foo")
     (scss2-empty)
-    (should (equal (buffer-string) ".a{content:;other:\"bar}\";} .b{color:red;}")))
+    (should (equal (buffer-string) ".a{content:\"\";other:\"bar}\";} .b{color:red;}")))
   (dolist (expression '("#{not \"a\"}" "#{\"a\" \"b\"}" "#{\";\"}" "#{\"}text\"}"))
     (with-temp-buffer
       (insert ".a { content: \"" expression "\"; color: red; }")
