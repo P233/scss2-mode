@@ -654,8 +654,8 @@ parameters, map entries and leaf at-rules are not independent targets. Explicit
 prefix selection resolves the nearest structural block; an else branch's entity
 is the complete conditional chain. Empty independently resolves bracket,
 interpolation and string interiors, complete declaration values (including
-flags), and all siblings of an if condition field. Its output can be
-intentionally incomplete.
+flags), map entry values, and all siblings of an if condition field. Its output
+can be intentionally incomplete.
 
 Selector deletion removes an adjacent comma without consuming intervening
 comments. Commenting wraps the branch and its comma together so the remaining

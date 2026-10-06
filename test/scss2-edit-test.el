@@ -34,6 +34,11 @@
     (should (equal ring kill-ring))
     (should (eq kill-ring-yank-pointer kill-ring))))
 
+(defun scss2-edit-test--with-point ()
+  "Return the buffer text with │ at point."
+  (concat (buffer-substring-no-properties (point-min) (point)) "│"
+          (buffer-substring-no-properties (point) (point-max))))
+
 (ert-deftest scss2-edit-duplicate-keeps-literal-crlf-line-endings ()
   (dolist (case '((css2-mode ".a {\r\n  co│lor: red;\r\n}"
                             ".a {\r\n  color: red;\r\n  color: red;\r\n}")
@@ -582,7 +587,37 @@
     (should (equal (buffer-string) ".a { font:  { weight: bold; } }")))
   (scss2-edit-test--buffer 'scss2-mode "$m: (a: 1, b: │2);"
     (scss2-empty)
-    (should (equal (buffer-string) "$m: ();"))))
+    (should (equal (buffer-string) "$m: (a: 1, b: );"))))
+
+(ert-deftest scss2-edit-empty-clears-map-entry-values ()
+  (dolist (case '(("$m: (sm│all: 576px, medium: 768px);" "$m: (small: │, medium: 768px);" "576px")
+                  ("$m: (small: 57│6px, medium: 768px);" "$m: (small: │, medium: 768px);" "576px")
+                  ("$m: (small│: 1 2);" "$m: (small: │);" "1 2")
+                  ("$m: (a: (b: │1));" "$m: (a: (b: │));" "1")
+                  ("$m: (a│: (b: 1));" "$m: (a: │);" "(b: 1)")
+                  ("$bp: (\n  sm│all: 576px,\n  medium: 768px,\n);"
+                   "$bp: (\n  small: │,\n  medium: 768px,\n);" "576px")
+                  (".a { @at-root (with│out: media) { x: 1; } }"
+                   ".a { @at-root (without: │) { x: 1; } }" "media")
+                  ;; Strings and interpolation keep their own interiors.
+                  ("$m: (\"s│m\": 1);" "$m: (\"│\": 1);" "sm")
+                  ("$m: (#{$k│}: 1);" "$m: (#{│}: 1);" "$k")
+                  ("$m: (a│: /* c */ 1);" "$m: (a: │);" "/* c */ 1")
+                  ;; At the comma or parenthesis after a value, its entry.
+                  ("$m: (a: 1│, b: 2);" "$m: (a: │, b: 2);" "1")
+                  ("$m: (a: 1, b: 2│);" "$m: (a: 1, b: │);" "2")
+                  ("$bp: (\n  small: 576px│,\n  medium: 768px,\n);"
+                   "$bp: (\n  small: │,\n  medium: 768px,\n);" "576px")
+                  ;; After a comma or at the opening parenthesis, the whole map.
+                  ("$m: (a: 1,│ b: 2);" "$m: (│);" "a: 1, b: 2")
+                  ("$m: │(a: 1);" "$m: (│);" "a: 1")
+                  ;; Keyword arguments and module configuration are not maps.
+                  (".a { @include m($x│: 1); }" ".a { @include m(│); }" "$x: 1")
+                  ("@use \"x\" with ($a│: 1);" "@use \"x\" with (│);" "$a: 1")))
+    (scss2-edit-test--buffer 'scss2-mode (car case)
+      (scss2-empty)
+      (should (equal (scss2-edit-test--with-point) (nth 1 case)))
+      (should (equal (car kill-ring) (nth 2 case))))))
 
 (ert-deftest scss2-edit-empty-clears-string-and-interpolation-interiors ()
   (dolist (case '(((css2-mode scss2-mode) ".a { content: \"a │b\" !important; }"
@@ -624,9 +659,7 @@
     (dolist (mode (car case))
       (scss2-edit-test--buffer mode (nth 1 case)
         (scss2-empty)
-        (should (equal (concat (buffer-substring-no-properties (point-min) (point)) "│"
-                               (buffer-substring-no-properties (point) (point-max)))
-                       (nth 2 case)))
+        (should (equal (scss2-edit-test--with-point) (nth 2 case)))
         (should (equal (car kill-ring) (nth 3 case))))))
   ;; Unterminated strings and a lone quote have no reliable interior.
   (dolist (mode '(css2-mode scss2-mode))

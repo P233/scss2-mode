@@ -82,7 +82,7 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 | Command | Action |
 | --- | --- |
 | `scss2-kill` | Kill a selector branch, complete declaration, or at-rule block |
-| `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration value, or `@if` condition |
+| `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration or map entry value, or `@if` condition |
 | `scss2-copy` | Copy the same entity as kill |
 | `scss2-comment-uncomment` | Comment the entity, or uncomment an existing comment |
 | `scss2-duplicate` | Duplicate the entity with its comma or statement separator |
@@ -94,7 +94,8 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 duplicate and mark, including its header and any `@else` branches. For empty,
 `C-u` clears only the nearest block's body (the current conditional branch).
 A declaration includes its complete multiline value, flags and terminator;
-arguments, parameters and map entries are not separate editing targets.
+arguments, parameters and map entries are not separate entities; empty clears
+a map entry's value.
 
 Avy is optional: install [Avy](https://github.com/abo-abo/avy) to use
 `scss2-avy-word`. Its range is the nearest complete rule or at-rule at invocation,

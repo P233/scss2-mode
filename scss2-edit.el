@@ -193,6 +193,15 @@ Only explicit block selection may cross a leaf statement boundary."
       (cons (treesit-node-start (car conditions))
             (treesit-node-end (car (last conditions)))))))
 
+(defun scss2--map-entry-value (node)
+  "Return the value bounds of map entry NODE, as for a declaration.
+For map NODE, use its entry that ends at point, before a comma or `)'."
+  (when-let* ((entry (if (equal (treesit-node-type node) "map")
+                         (cl-find (point) (scss2--children node t) :key #'treesit-node-end)
+                       node))
+              (_ (equal (treesit-node-type entry) "map_entry")))
+    (scss2--value-bounds entry)))
+
 (defun scss2--content-target (block)
   "Resolve content at point, or the nearest structural body with BLOCK."
   (scss2--check-target
@@ -220,6 +229,8 @@ Only explicit block selection may cross a leaf statement boundary."
              ;; Unsupported leaf statements never empty their parent block.
              (setq node nil))
             ((scss2--comment-p node) (setq node nil))
+            ((setq bounds (scss2--map-entry-value node))
+             (setq owner (or statement node)))
             ((scss2--interior node)
              (setq bounds (scss2--interior node) owner (or statement node)))
             (t (setq node (treesit-node-parent node))))))
@@ -382,7 +393,8 @@ With prefix BLOCK, kill the nearest complete structural block instead."
 ;;;###autoload
 (defun scss2-empty (&optional block)
   "Kill the nearest delimited interior, declaration value or if condition.
-Brackets, interpolation and string quotes delimit interiors.
+Brackets, interpolation and string quotes delimit interiors.  A map entry
+empties its value as a declaration does.
 With prefix BLOCK, clear the nearest structural block's body."
   (interactive "P")
   (let ((target (scss2--content-target block)))
