@@ -144,6 +144,7 @@ Corfu is the supported frontend. Company works through standard `completion-at-p
 - Parser limits ([full list](https://github.com/P233/tree-sitter-scss#known-limits)): escaped keywords such as `@m\65 dia` are read as ordinary names, and typed `attr()` unions such as `type(<length> | <percentage>)` do not parse.
 - In a media or container query, a feature name continued by interpolation, as in `(max-#{$side} > 1px)`, colors as a value rather than a property.
 - Internet Explorer–only syntax is not supported: the `*` property hack, `alpha(opacity=50)` arguments, `progid:` filters and `expression()` parse as local errors.
+- A last rule left open after a complete declaration, as in `.a { color: red;` at the end of the file, makes the whole file one parse error, so structural commands stop until `}` is typed; `electric-pair-mode` inserts it with `{`.
 - Each open buffer keeps a syntax tree of tens of bytes per source byte, so several large files use noticeably more memory than `scss-mode`; buffers shown in no window release it after `scss2-idle-release-delay`.
 
 ## Development
