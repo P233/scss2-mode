@@ -42,10 +42,9 @@ not create a stronger boundary. `vendor/` is an indivisible generated snapshot;
 contracts and full-mode integration. There are no runtime dependencies on `test/`
 or `docs/`.
 
-The bundled parser targets complete input and keeps a statement being typed
-local: it ends before a following declaration, so later rules keep their tree,
-faces and structural commands. Damaged-input tree shape and colors inside the
-error are not compatibility guarantees. Context's existing text-based completion
+The parser's [statements-being-typed contract](https://github.com/P233/tree-sitter-scss#consumer-contract)
+usually keeps later rules intact; inside the error neither tree shape nor colors
+are guaranteed. Context's existing text-based completion
 fallbacks remain host behavior; structural editing still rejects ambiguous tree
 ranges, so the unfinished construct itself is not editable until it is repaired.
 Integration tests check that the block after an unfinished statement stays
@@ -59,12 +58,13 @@ interfaces above; private `--` helpers are owned by their library.
 ## Initialization and lifetime
 
 1. Enter `prog-mode`, then `scss2-syntax-lexical-setup` installs the dialect's
-   syntax table, comment syntax and indentation, none of which needs a parser.
+   syntax table, comment syntax, indentation and syntax-propertize function;
+   none needs a parser, and the function reads the tree only once one exists.
    Emacs clears the previous major mode's local state/parsers.
 2. `scss2-syntax-setup` selects the dialect and private grammar generation, creates
    its parser with a change notifier (see
    [Changed ranges of early reparses](#changed-ranges-of-early-reparses)) and
-   installs the shared syntax-property reader.
+   extends syntax propertization back to the ranges a reparse changed.
 3. Full mode composition adds Emmet, highlighting, navigation and the CAPF hook,
    then makes treesit.el's tree hooks and commands read Font Lock's view (see
    [Narrowing and the shared parser](#narrowing-and-the-shared-parser)).
@@ -144,16 +144,16 @@ not force GC; freed allocations can remain resident in Emacs's allocator.
 
 ### Lexical editing without css-mode
 
-The modes derive from `prog-mode` and declare `scss-mode`, `css-mode` and
-`css-base-mode` as extra parents with `derived-mode-add-parents`, as
+The modes derive from `prog-mode` and declare `css-mode` and `css-base-mode`,
+plus `scss-mode` for `scss2-mode`, as extra parents with `derived-mode-add-parents`, as
 `css-ts-mode` does for `css-mode`. `derived-mode-p`, directory-local variables
 and Emmet's CSS host checks therefore treat them as CSS buffers without loading
 css-mode; those modes' hooks and keymaps do not apply. css-mode pulls in eww,
-shr, sgml-mode and SMIE. In a fresh `emacs -Q` session, requiring the
-byte-compiled package with Emmet took 130–135 ms and added 4.7 MB of live Lisp
-heap and 89 features while it did; without it, 25–28 ms, 1.7 MB and 39 features.
-Emmet2 `d58969a` and later never load css-mode, including for styles embedded
-in another host and for multi-line CSS completion previews.
+shr, sgml-mode and SMIE, which made requiring the package about five times
+slower (130 ms against 25 ms in `emacs -Q`) and added 3 MB of live heap. Emmet2
+at the pinned commit never loads it either, also not for embedded styles or
+CSS completion previews; a fresh-process test checks that opening a stylesheet
+and completing a value does not load it.
 
 Indentation reads bracket depth from `syntax-ppss`, so it works without a parser,
 as in a clone or after a grammar failure. Inside a bracket, a statement follows
@@ -165,12 +165,9 @@ continuation lines follow the previous one; the next selector of a list, an
 `@else` branch and a lone `{` align with the statement. A blank line after a
 trailing `,` or `:` continues that declaration. A line that starts with `*` in
 a block comment aligns under the opener's star; other comment and string lines
-keep their indentation. Reindenting the 335-file corpus at each file's own width
-changes 3 of 35,168 nonblank lines, all nested space-separated continuations that
-Prettier indents further, against 65 with css-mode's SMIE rules. At 10,703 line
-ends, a newline gets SMIE's column except in 2 cases where SMIE left an
-unfinished comma-separated value; typing a declaration and `}` after a `{`
-returns `}` to the opening line in all 1,857 cases.
+keep their indentation. Reindenting a 335-file local corpus at each file's own
+width changes 3 of 35,168 nonblank lines (nested space-separated continuations
+that Prettier indents further), against 65 with css-mode's SMIE rules.
 
 Comment filling adapts the comment branch of css-mode's `css-fill-paragraph`
 and its adaptive fill prefix. Filling in code changes nothing, where css-mode
@@ -181,11 +178,12 @@ cycling and MDN lookup are not provided.
 With `scss2-fontify-colors`, a last font-lock rule shows hex colors, CSS color
 names (from `shr-color`) and `rgb()`, `rgba()`, `hsl()` and `hsla()` calls with
 literal components on their own color, as css-mode's `css-fontify-colors` did;
-over the corpus both mark the same 1,177 spans. Fontifying the 73 KB fixture in
-1,500-character chunks takes 0.28 ms per chunk with previews, against 0.49 ms
-with css-mode's regexp pass and 0.21 ms without previews.
+it marks the same spans as css-mode over the corpus, in less time than
+css-mode's regexp pass.
 
 ## Completion flow
+
+Completion finishes unfinished loop ranges, variable values and loop bindings.
 
 `scss2-context-at-point` first excludes opaque comments and strings, then applies
 one ordered classifier. Recognized literals, names, selectors, queries and
@@ -301,16 +299,6 @@ tests retain navigation, faces, hooks, dialect lifecycle, Emmet and cross-featur
 contracts. The optional Corfu/YAS suite exercises typing, choosing, host TAB and undo;
 it stubs drawing and is not GUI acceptance.
 
-The later 2026-10-06 import of parser `8bd60cf` replaces snapshot `7d5fef4`.
-Its highlight query no longer skips comments around a query feature name, which
-cuts the query's compile time from about 52 to 31 ms per dialect, and a
-semicolon-ended declaration is one tree node instead of two, which makes
-retained trees about 5% smaller. The wide-query performance test therefore puts
-its 4,096 comments between `1px` and `<`, where the property role survives.
-Emacs 31.1 validation passed 72 core, 3 semantic, 4 Python, 292 source ERT, 292
-installed ERT, 23 Corfu/YAS and 3 Avy tests, plus strict byte compilation and
-the release-manifest check; Company/Orderless was not run.
-
 ## Performance model
 
 Tree-sitter owns incremental parsing. Classification traverses relevant ancestors
@@ -338,31 +326,9 @@ documentation data loads on the first semantic completion that needs it.
 Compare byte-compiled copies with the same parser, Emmet, inputs and GC
 settings. Candidate counts, parser counts and face hashes must agree before
 timing is compared. A repeatable material regression requires investigation; a
-cache is not the default remedy.
-
-### Parser snapshot measurements
-
-The `7d5fef4` → `8bd60cf` snapshot comparison used `scripts/benchmark-emacs.el`
-on an Apple M1 Pro with Emacs 31.1, Emmet2 `8ef37a6`, the same byte-compiled
-runtime Lisp and the same fixture. Three alternating process runs per snapshot
-each used two warmups and three measured repetitions; inputs and final
-face-span hashes were stable across runs. Medians of process medians, in
-milliseconds:
-
-| SCSS workload | Parse before → after | Full fontification before → after |
-| --- | ---: | ---: |
-| 72,408-byte stress fixture | 3.910 → 3.907 | 16.042 → 16.072 |
-| 724,089-byte repeated fixture | 38.645 → 37.909 | 229.213 → 231.107 |
-| 131,087-byte numeric fixture | 19.519 → 18.861 | 36.824 → 35.998 |
-| 512 nested query levels | 0.398 → 0.401 | 8.829 → 8.754 |
-| 4,096 query comments | 2.367 → 2.371 | 6.521 → 4.874 |
-
-Warm parsing and fontification are effectively unchanged, except that the
-4,096 comments between a feature name and its comparison now fontify 25% faster
-because the query stops matching across them. Warmups hide the cold compile
-saving; in a fresh session the first SCSS buffer's mode setup and parse fell
-from about 75 to 61 ms. These are batch timings with GC between repetitions and
-color previews disabled; they exclude redisplay.
+cache is not the default remedy. `scripts/benchmark-emacs.el` measures mode
+setup, parsing and full and incremental fontification per workload; compare
+separate processes on the same fixtures.
 
 ## Narrowing and the shared parser
 
@@ -645,12 +611,9 @@ private and also updates embedded parsers' ranges, which the bug#78402 change
 moved out of reparse time; scss2 has no embedded parsers.
 
 When redisplay itself reparses, its marking and the notifier's cover the same
-ranges. Neither adds a parse: every key parsed once, with and without a tree
-read before redisplay. Per-key medians with and without the notifier overlapped
-in every run: 3.47-4.08 ms and 3.48-4.09 ms in the widened 729 KB buffer,
-0.20-0.22 ms and 0.20-0.21 ms in the 27 KB one. In 250 random edits with a tree
-read before each redisplay, 23-37 left stale faces without the notifier and
-none with it.
+ranges, so the notifier adds no parse and no measurable per-key cost; in 250
+random edits with a tree read before each redisplay, 23-37 left stale faces
+without it and none with it.
 
 Idle release ignores the mode's own notifier when deciding eligibility; other
 packages' notifiers still keep a buffer. The release's empty parse and the lazy
@@ -709,11 +672,9 @@ window settings and the prefix argument are locally disabled. This prevents
 another buffer from receiving the same numeric range. Label rendering and
 off-screen interaction follow Avy; no paging or scrolling layer is added.
 
-Completion finishes unfinished loop ranges, variable values and loop bindings.
-
 The grammar cache rejects empty or missing compiler output before publishing it
-and rebuilds existing empty caches. Its identity hashes only the native build
-inputs under `src/`, so a query or fixture update reuses the built library. `CC`
+and rebuilds existing empty caches. Its identity hashes the vendored files under
+`src/`, so a query or fixture update reuses the built library. `CC`
 is split like a shell command, and the compiler runs in the cache directory.
 Without `treesit-extra-load-path`, the library mapping is relative to
 `user-emacs-directory` as of the latest grammar request; if that variable changes

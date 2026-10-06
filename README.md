@@ -54,7 +54,7 @@ A buffer larger than `treesit-max-buffer-size`, or a parser that cannot be built
 - **Complete at point** with `M-x completion-at-point` or a [frontend](#frontends); `M-x emmet2-complete` requests Emmet candidates only. Completion covers at-rules, property values, CSS functions, pseudo-selectors, media queries, local import paths, and custom properties in `var()`; SCSS adds visible variables, functions, mixins, named arguments, and members of local `@use` modules. Property names come only from Emmet expansion; class, ID, and tag names, and ordinary text in comments and strings, are not completed.
 - **Fuzzy matching:** `display: ib` offers `inline-block`. The `scss2` style, the default for the `scss2` completion category, also decodes CSS escapes and treats Sass `_` and `-` alike.
 - **Leave values with TAB:** anywhere in a property value, including nested functions, strings, URLs, and snippet fields, TAB jumps past the declaration's `;`, closing an open completion menu without accepting it. Elsewhere, or without an accessible `;`, TAB keeps its usual behavior.
-- **No `css-mode` underneath:** the modes neither load nor run Emacs's `css-mode`. They supply their own comment syntax, comment filling, color previews and indentation, which nests by `scss2-indent-offset`, follows a block's existing indentation, and indents continued values and selectors as Prettier does; EditorConfig's `indent_size` sets `scss2-indent-offset`, and `css-indent-offset` is not read. Code that asks `derived-mode-p` about `css-mode` or `scss-mode` still matches, but those modes' hooks and key bindings do not apply; use `scss2-mode-hook`, `css2-mode-hook` and their maps. Highlighting uses Font Lock faces, plus `scss2-selector` and `scss2-property`, so themes own the palette.
+- **No `css-mode` underneath:** the modes neither load nor run Emacs's `css-mode`. They supply their own comment syntax, comment filling, color previews and indentation, which nests by `scss2-indent-offset`, follows a block's existing indentation, and indents continued values and selectors as Prettier does; EditorConfig's `indent_size` sets `scss2-indent-offset`, and `css-indent-offset` is not read. `derived-mode-p` still matches `css-mode` in both modes and `scss-mode` in `scss2-mode`, but those modes' hooks and key bindings do not apply; use `scss2-mode-hook`, `css2-mode-hook` and their maps. Highlighting uses Font Lock faces, plus `scss2-selector` and `scss2-property`, so themes own the palette.
 
 To match with your own styles, override the category. Your styles then match raw spellings, so escaped queries such as `i\62` and Sass `_`/`-` equivalence find nothing:
 
@@ -130,7 +130,7 @@ Corfu is the supported frontend. Company works through standard `completion-at-p
 - Module completion reads local `@use` files, including unsaved edits in open buffers. It does not follow `@forward`, so a module that only forwards offers no names. Unqualified variables, functions, and mixins come only from the current file, not from `@import`ed files.
 - Built-in modules such as `sass:math`, package or load-path modules, and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: other completion functions do not run there, even without a match.
 - Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments, or an unclosed media group followed by another condition.
-- Escaped keywords such as `@m\65 dia` are read as ordinary names, and typed `attr()` unions such as `type(<length> | <percentage>)` do not parse.
+- Parser limits ([full list](https://github.com/P233/tree-sitter-scss#known-limits)): escaped keywords such as `@m\65 dia` are read as ordinary names, and typed `attr()` unions such as `type(<length> | <percentage>)` do not parse.
 - In a media or container query, a comment right after `(`, after a sign or beside the feature name, as in `(/* c */ hover)`, colors the feature name as a value rather than a property.
 - Internet Explorer–only syntax is not supported: the `*` property hack, `alpha(opacity=50)` arguments, `progid:` filters and `expression()` parse as local errors.
 - Each open buffer keeps a syntax tree of tens of bytes per source byte, so several large files use noticeably more memory than `scss-mode`; buffers shown in no window release it after `scss2-idle-release-delay`.
@@ -152,6 +152,8 @@ make package
 Optional checks (popup drawing excluded):
 
 ```sh
+# Mode setup, parsing and fontification benchmark; compare separate processes
+emacs -Q --batch -L /path/to/emmet2-mode -l scripts/benchmark-emacs.el
 # Completion benchmark; compare byte-compiled copies on the same Emacs
 emacs -Q --batch -L . -L /path/to/emmet2-mode -l scripts/benchmark-completion.el
 # Corfu/YAS, using emmet2-mode's pinned test dependencies

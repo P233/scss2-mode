@@ -181,6 +181,7 @@
     (with-temp-buffer
       ;; Batch mode and hidden buffers otherwise disable real JIT hooks.
       (rename-buffer "scss2-wide-query-test" t)
+      ;; Comments between the value and `<` keep the feature name's property role.
       (insert "@media (1px " (apply #'concat (make-list 4096 "/**/ "))
               "< width) { .a { color: red; } }")
       (let ((scss2-fontify-colors nil))
