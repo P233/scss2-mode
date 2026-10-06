@@ -84,7 +84,7 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 | `scss2-kill` | Kill a selector branch, complete declaration, leaf statement such as `@include foo;`, or at-rule block |
 | `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration, map entry or `@return`-style value, or `@if` condition |
 | `scss2-copy` | Copy the same entity as kill |
-| `scss2-comment-uncomment` | Comment the entity, or uncomment an existing comment |
+| `scss2-comment-uncomment` | Comment the entity, or uncomment the comment at point (one `//` line at a time) |
 | `scss2-duplicate` | Duplicate the entity with its comma or statement separator |
 | `scss2-mark` | Select the entity; repeated calls keep the selection |
 | `scss2-avy-word` | Jump to a word inside the invocation's complete rule or at-rule block |
@@ -93,6 +93,8 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 `C-u` selects the nearest complete structural block for kill, copy, comment,
 duplicate and mark, including its header and any `@else` branches. For empty,
 `C-u` clears only the nearest block's body (the current conditional branch).
+On a `//` comment, `C-u` uncomments its whole run of adjacent `//` lines, such
+as a block commented with `C-u`.
 A declaration includes its complete multiline value, flags and terminator;
 arguments, parameters and map entries are not separate entities; empty clears
 a map entry's value.

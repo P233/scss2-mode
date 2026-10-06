@@ -847,7 +847,7 @@
           (scss2-comment-uncomment)
           (should-not (treesit-node-check (scss2--root-node) 'has-error))
           (goto-char (point-min)) (re-search-forward "/[/*]")
-          (scss2-comment-uncomment)
+          (scss2-comment-uncomment t)
           (should (equal (buffer-string) original))))))
   (scss2-edit-test--buffer 'scss2-mode "// first\n\n// se│cond\n.a {}"
     (scss2-comment-uncomment)
@@ -859,7 +859,7 @@
     (let ((original (buffer-string)))
       (scss2-comment-uncomment t)
       (goto-char (point-min)) (search-forward "//")
-      (scss2-comment-uncomment)
+      (scss2-comment-uncomment t)
       (should (equal (buffer-string) original)))))
 
 (ert-deftest scss2-edit-comment-and-selector-ranges-stay-accessible ()
@@ -873,7 +873,11 @@
   (scss2-edit-test--buffer 'scss2-mode "// first\n// se│cond\n.a {}"
     (let ((position (point)))
       (forward-line 0) (narrow-to-region (point) (point-max)) (goto-char position))
-    (scss2-edit-test--unchanged #'scss2-comment-uncomment)))
+    (scss2-edit-test--unchanged (lambda () (scss2-comment-uncomment t)))
+    (scss2-comment-uncomment)
+    (save-restriction
+      (widen)
+      (should (equal (buffer-string) "// first\nsecond\n.a {}")))))
 
 (ert-deftest scss2-edit-copy-mark-and-duplicate-preserve-editor-state ()
   (scss2-edit-test--buffer 'css2-mode ".a { content: \"ab│cd\"; }"
@@ -970,7 +974,7 @@
           (should-not (treesit-node-check (scss2--root-node) 'has-error))
           (goto-char (point-min)) (search-forward "//")
           (undo-boundary)
-          (scss2-comment-uncomment)
+          (scss2-comment-uncomment t)
           (undo-boundary)
           (should (equal (buffer-string) original))
           (should-not (treesit-node-check (scss2--root-node) 'has-error))
@@ -979,6 +983,18 @@
           (should (string-prefix-p "// @mixin" (buffer-string)))
           (let ((last-command 'undo)) (undo-only 1))
           (should (equal (buffer-string) original)))))))
+
+(ert-deftest scss2-edit-uncomment-takes-one-line-unless-prefixed ()
+  (scss2-edit-test--buffer 'scss2-mode ".a {\n  // TODO: tweak\n  co│lor: red;\n}"
+    (let ((original (buffer-string)))
+      (scss2-comment-uncomment)
+      (should (equal (buffer-string) ".a {\n  // TODO: tweak\n  // color: red;\n}"))
+      (goto-char (point-min)) (search-forward "// color")
+      (scss2-comment-uncomment)
+      (should (equal (buffer-string) original))))
+  (scss2-edit-test--buffer 'scss2-mode ".a {\n  // one\n  // t│wo\n  color: red;\n}"
+    (scss2-comment-uncomment t)
+    (should (equal (buffer-string) ".a {\n  one\n  two\n  color: red;\n}"))))
 
 (ert-deftest scss2-edit-multiline-line-comment-aligns-its-markers ()
   (scss2-edit-test--buffer 'scss2-mode ".a {\n  .inner {\n    x: 1│;\n  }\n  color: red;\n}"
@@ -996,7 +1012,7 @@
       (let ((original (buffer-string)))
         (scss2-comment-uncomment t)
         (goto-char (point-min)) (search-forward "//")
-        (scss2-comment-uncomment)
+        (scss2-comment-uncomment t)
         (should (equal (buffer-string) original))
         (should-not (treesit-node-check (scss2--root-node) 'has-error))))))
 

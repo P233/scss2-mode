@@ -666,10 +666,13 @@ selects the interpolation. Its output can be intentionally incomplete.
 Selector deletion removes an adjacent comma without consuming intervening
 comments. Commenting wraps the branch and its comma together so the remaining
 selector stays valid, using block comments for inline targets and standalone
-line comments for SCSS lines. Adjacent standalone `//` comments are uncommented
-together; blank lines separate groups. When commenting a block, blank lines
-also receive `//` so the whole block can be restored together. Line comments
-preserve original blank-line whitespace and CRLF endings. Emacs's comment machinery quotes and
+line comments for SCSS lines. Uncommenting restores one `//` line; with a
+prefix it restores the run of adjacent standalone `//` lines, which blank lines
+end. Grouping by default would also restore an unrelated `//` comment adjacent
+to commented code. When commenting a block, blank lines also receive `//` so a
+prefixed uncomment restores the whole block. Line comments preserve original
+blank-line whitespace and CRLF endings, and a multi-line comment puts all of its
+markers in column 0. Emacs's comment machinery quotes and
 restores nested block comment delimiters. Duplicate preserves body text and
 CRLF; repeated mark keeps its existing selection. Input errors and inaccessible
 ranges are rejected before mutation, and transactions roll back failed edits.

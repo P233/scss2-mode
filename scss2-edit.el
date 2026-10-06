@@ -357,7 +357,7 @@ delegate to the existing TAB binding, including completion and snippet fields."
   (let ((begin (scss2--target-beg target)) (end (scss2--target-end target))
         (after (scss2--target-after target)) (before (scss2--target-before target)))
     (when (eql (scss2--target-count target) 1)
-      (user-error "Cannot remove the only selector; use C-u to select its block"))
+      (user-error "This is the rule's only selector; use C-u to select its block"))
     (when-let* ((comma (or after before)))
       (unless (<= (point-min) (treesit-node-start comma)
                   (treesit-node-end comma) (point-max))
@@ -527,46 +527,60 @@ With prefix BLOCK, select the nearest complete structural block."
     (scss2--make-target :owner node :beg (treesit-node-start first)
                         :end (treesit-node-end last))))
 
-;;;###autoload
-(defun scss2-comment-uncomment (&optional block)
-  "Comment the same entity as `scss2-kill', or uncomment an existing comment.
-With prefix BLOCK, comment the nearest complete structural block."
-  (interactive "P")
-  (let* ((comment (unless block
-                    (scss2--with-font-lock-view
-                      (scss2--ancestor (scss2--touched-node) scss2--comment-types))))
-         (target (if comment
-                     (scss2--check-target
-                      (scss2--with-font-lock-view (scss2--comment-target comment)))
-                   (scss2--resolve-target (and block 'block))))
-         (ranges (unless comment (scss2--deletion-ranges target)))
-         (begin (if comment (scss2--target-beg target) (apply #'min (mapcar #'car ranges))))
-         (end (if comment (scss2--target-end target)
-                ;; Keep separator whitespace outside the wrapper: uncommenting
-                ;; removes padding at its edge along with the comment markers.
-                (max (scss2--target-end target)
-                     (if-let* ((comma (scss2--target-after target)))
-                         (treesit-node-end comma) 0))))
+;; Uncommenting removes padding at a range's edge along with its markers.
+(defun scss2--comment-range (block)
+  "Return (BEGIN END LINE-COMMENT) for commenting the entity at point.
+With BLOCK, use the nearest complete structural block.  Separator
+whitespace stays outside the range; LINE-COMMENT selects // markers."
+  (let* ((target (scss2--resolve-target (and block 'block)))
+         (begin (apply #'min (mapcar #'car (scss2--deletion-ranges target))))
+         (end (max (scss2--target-end target)
+                   (if-let* ((comma (scss2--target-after target)))
+                       (treesit-node-end comma) 0)))
          ;; Inline // would also hide the following selector or declaration.
-         (line-comment (if comment (equal (treesit-node-type comment) "inline_comment")
-                         (and (eq scss2-dialect 'scss)
-                              (not (eq (scss2--target-separator target) 'comma))
-                              (scss2--whole-lines (cons begin end))))))
-    (when (and line-comment (not comment))
+         (line-comment (and (eq scss2-dialect 'scss)
+                            (not (eq (scss2--target-separator target) 'comma))
+                            (scss2--whole-lines (cons begin end))
+                            t)))
+    (when line-comment
       ;; At CRLF's CR, newcomment otherwise inserts an extra LF.
       (setq end (save-excursion (goto-char end) (skip-chars-forward " \t\r") (point)))
       ;; Plain style puts later lines' markers in column 0, so put the first's there too.
       (save-excursion
         (goto-char begin)
         (when (< (line-end-position) end) (setq begin (line-beginning-position)))))
-    (scss2--transaction
-      (let ((comment-start (if line-comment "// " "/* "))
-            (comment-end (if line-comment "" " */"))
-            ;; Keep one block's // comments contiguous for a single uncomment.
-            (comment-empty-lines t)
-            ;; Indented line comments pad blank lines to the block's column.
-            (comment-style (if line-comment 'plain 'multi-line)))
-        (if comment (uncomment-region begin end) (comment-region begin end))))))
+    (list begin end line-comment)))
+
+(defun scss2--uncomment-range (comment group)
+  "Return (BEGIN END LINE-COMMENT) for uncommenting COMMENT.
+With GROUP, include its run of adjacent standalone // lines."
+  (let ((target (scss2--check-target
+                 (scss2--with-font-lock-view
+                   (if group (scss2--comment-target comment) (scss2--node-target comment))))))
+    (list (scss2--target-beg target) (scss2--target-end target)
+          (equal (treesit-node-type comment) "inline_comment"))))
+
+;;;###autoload
+(defun scss2-comment-uncomment (&optional block)
+  "Comment the same entity as `scss2-kill', or uncomment the comment at point.
+Uncomment one // line at a time.  With prefix BLOCK, uncomment a // line's
+whole run of adjacent standalone // lines, or comment the nearest complete
+structural block."
+  (interactive "P")
+  (let ((comment (scss2--with-font-lock-view
+                   (scss2--ancestor (scss2--touched-node) scss2--comment-types))))
+    (pcase-let ((`(,begin ,end ,line-comment)
+                 (if comment
+                     (scss2--uncomment-range comment block)
+                   (scss2--comment-range block))))
+      (scss2--transaction
+        (let ((comment-start (if line-comment "// " "/* "))
+              (comment-end (if line-comment "" " */"))
+              ;; Keep a block's // lines one run for a prefixed uncomment.
+              (comment-empty-lines t)
+              ;; Plain style leaves blank lines' whitespace for an exact uncomment.
+              (comment-style (if line-comment 'plain 'multi-line)))
+          (if comment (uncomment-region begin end) (comment-region begin end)))))))
 
 ;;;###autoload
 (defun scss2-avy-word ()
