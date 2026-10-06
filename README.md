@@ -11,13 +11,24 @@ Parsing and highlighting target complete CSS/SCSS files. A statement being typed
 - **Emacs 31.1+**, built with Tree-sitter support.
 - **A C compiler** available to Emacs (`cc`, or the `CC` environment variable).
 - **emmet2-mode 2.0.0**, installed as a dependency. It is unreleased: use its `main` branch at or after the commit pinned in [`.github/workflows/check.yml`](.github/workflows/check.yml). Older emmet2-mode packages are incompatible.
-- **Python 3 and Git** to build the local package archive.
+- **Python 3 and Git** to build the local package archive, when not installing with straight.el.
 
 CI runs on Linux and macOS. Indented Sass (`.sass`) is not supported.
 
 ## Install
 
-From your scss2-mode checkout, build one local archive containing both packages (add `--emacs /path/to/emacs` if `emacs` is not on `PATH`):
+With straight.el and use-package, declare emmet2-mode first so straight knows its recipe; **you do not enable `emmet2-mode` yourself**:
+
+```elisp
+(use-package emmet2-mode
+  :straight (emmet2-mode :type git :host github :repo "P233/emmet2-mode"
+                         :files (:defaults "data")))
+(use-package scss2-mode
+  :straight (scss2-mode :type git :host github :repo "P233/scss2-mode"
+                        :files (:defaults "vendor")))
+```
+
+Without straight.el, build one local archive from your scss2-mode checkout containing both packages (add `--emacs /path/to/emacs` if `emacs` is not on `PATH`):
 
 ```sh
 python3 scripts/package.py --output-dir dist/local-archive \
