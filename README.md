@@ -114,8 +114,11 @@ Entity commands require point to touch a token. Blank space and unsupported
 leaf statements do not select a containing rule; use `C-u` explicitly.
 Selector branches include nested pseudo-class selectors. Killing or commenting
 the only branch is rejected: select the whole rule with `C-u`. Comments between
-a killed branch and its comma remain in place. Empty can intentionally leave
-an unfinished value or condition. Each mutation is one undo step; incomplete
+a killed branch and its comma remain in place. Empty stops at a comment or at
+a leaf statement it does not clear, such as `@extend` or `@include` outside
+its arguments, and reports that there is nothing to empty instead of clearing
+the enclosing block; blank space in a block clears its body. Empty can
+intentionally leave an unfinished value or condition. Each mutation is one undo step; incomplete
 input boundaries are rejected, and a failed edit restores text, point, selection
 and the kill ring. See the [structural edge cases](docs/architecture.md#decisions-and-known-limits).
 

@@ -241,8 +241,9 @@ For map NODE, use its entry that ends at point, before a comma or `)'."
             ((scss2--interior node)
              (setq bounds (scss2--interior node) owner (or statement node)))
             (t (setq node (treesit-node-parent node))))))
-       (when bounds
-         (scss2--make-target :owner owner :beg (car bounds) :end (cdr bounds)))))))
+       (if bounds
+           (scss2--make-target :owner owner :beg (car bounds) :end (cdr bounds))
+         (user-error "Nothing to empty here"))))))
 
 (defun scss2--declaration-tab-target ()
   "Return where TAB moves within the declaration at point, or nil.

@@ -589,6 +589,15 @@
     (scss2-empty)
     (should (equal (buffer-string) "$m: (a: 1, b: );"))))
 
+(ert-deftest scss2-edit-empty-stops-at-unsupported-statements ()
+  (dolist (source '(".a { @ext│end .b; x: 1; }" ".a { @include m│x; x: 1; }"
+                    ".a { @include m│x($a); x: 1; }" "@use \"x\" a│s m;"
+                    ".a { x: 1; /* no│te */ y: 2; }" ".a { x: 1; // no│te\n  y: 2;\n}"))
+    (scss2-edit-test--buffer 'scss2-mode source
+      (scss2-edit-test--unchanged #'scss2-empty)
+      (should (equal (cadr (should-error (scss2-empty) :type 'user-error))
+                     "Nothing to empty here")))))
+
 (ert-deftest scss2-edit-empty-clears-value-statement-values ()
   (dolist (case '(("@function f() { @return $fo│o + 1; }" "@function f() { @return │; }" "$foo + 1")
                   ("@function f() { @re│turn $foo; }" "@function f() { @return │; }" "$foo")
@@ -690,7 +699,7 @@
   (dolist (mode '(css2-mode scss2-mode))
     (dolist (case '((".a { content: \"ab│c\n}" . "This syntax is incomplete; no reliable edit range")
                     ("$x: \"ab│" . "This syntax is incomplete; no reliable edit range")
-                    ("@media \"│" . "No stylesheet target here")))
+                    ("@media \"│" . "Nothing to empty here")))
       (scss2-edit-test--buffer mode (car case)
         (scss2-edit-test--unchanged #'scss2-empty)
         (should (equal (cadr (should-error (scss2-empty) :type 'user-error)) (cdr case)))))))
