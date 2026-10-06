@@ -2,12 +2,12 @@
   "version": "0.11.0",
   "source": {
     "repository": "https://github.com/P233/tree-sitter-scss",
-    "commit": "795aa18a000fe89cb1fdbca8e4597b1c6ea48c47",
+    "commit": "7f4185e0a38c2bb5aa5c847b7e97bf8dcb840c98",
     "dirty": false
   },
   "files": {
     "LICENSE": "fc85bef7cd891ca73a6f06134a1b48a1fc738256ff4567bb8c1dbc5beacfc90b",
-    "src/parser.c": "84e5aa60e268267a19efa53fbd27f12b34b431ac8240807d9f0bac530d08a378",
+    "src/parser.c": "e8c6c21b370af275a8a8c5b353d8f28b9a62789cec37e9c27a747d482324a829",
     "src/scanner.c": "4e681d577ad8aea289c1c2da9214c62e690826c6fa41952e4413a181d873ef4a",
     "src/node-types.json": "447ca91214011a9c74021d0975180aaf59c9537828b88f375af0fdb6ef7b0cc6",
     "src/tree_sitter/alloc.h": "b29c1c9fb7cc82f58c84b376df1297d6e2737a1d655fd356db0859e3c29c2fea",
@@ -16,5 +16,5 @@
     "queries/highlights.scm": "7bf5328a93f4fe79be602e89e8dfe15243575cf43244ac0b48271e569862ca54",
     "examples/highlight-stress.scss": "b80812dee6aaa5c29d8211bcf56566ad55f0d902f65df06e3fcfe4163cc0eb84"
   },
-  "contentId": "861f7c32f056545260a8edafee15c9931d87b40764a7fb3eb5f328eb0caf87a8"
+  "contentId": "0b7edfccc5e729c73ed53c1f9922ab3b6f65a14025823123c59bcfc5bcda10a1"
 }
