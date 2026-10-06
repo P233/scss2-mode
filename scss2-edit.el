@@ -4,7 +4,8 @@
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
-;; Entity commands select declarations, selector branches or complete blocks.
+;; Entity commands select declarations and other statements, selector branches
+;; or complete blocks.
 ;; Empty resolves content independently.  Targets live for one command only.
 
 ;;; Code:
@@ -163,7 +164,8 @@ Only explicit block selection may cross a leaf statement boundary."
             ((member (treesit-node-type statement) scss2--declaration-types)
              (scss2--node-target statement 'statement))
             ((scss2--block-bounds statement)
-             (scss2--node-target (scss2--block-node statement) 'statement)))))))))
+             (scss2--node-target (scss2--block-node statement) 'statement))
+            (t (scss2--node-target statement 'statement)))))))))
 
 (defun scss2--resolve-target (&optional kind)
   "Resolve KIND in Font Lock's view and enforce accessible edit bounds."
@@ -411,7 +413,7 @@ Lines are judged in Font Lock's view; the result stays accessible."
 
 ;;;###autoload
 (defun scss2-kill (&optional block)
-  "Kill a selector branch, declaration or complete at-rule block.
+  "Kill a selector branch, declaration, leaf statement or complete block.
 With prefix BLOCK, kill the nearest complete structural block instead."
   (interactive "P")
   (scss2--kill-target (scss2--resolve-target (and block 'block))))

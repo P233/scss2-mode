@@ -440,7 +440,10 @@
   (scss2-edit-test--buffer 'css2-mode ".a:lang(\"│en\") { color: red; }"
     (scss2-edit-test--unchanged #'scss2-kill))
   (scss2-edit-test--buffer 'scss2-mode "@use \"│theme\";"
-    (scss2-edit-test--unchanged #'scss2-kill)))
+    (let ((position (point)))
+      (narrow-to-region position (point-max))
+      (goto-char position)
+      (scss2-edit-test--unchanged #'scss2-kill))))
 
 (ert-deftest scss2-edit-narrowed-literals-keep-the-full-syntax-owner ()
   (dolist (case '((".a { content: \".b { color: re│d; }\"; }" . ".b { color: red; }")
@@ -557,10 +560,30 @@
     (scss2-kill)
     (should (equal (buffer-string) ""))))
 
+(ert-deftest scss2-edit-leaf-statements-are-entities ()
+  (dolist (statement '("@include foo(1, 2);" "@debug 1;" "@extend .base;" "@content;"))
+    (scss2-edit-test--buffer 'scss2-mode
+        (concat ".a {\n  │" statement "\n  color: red;\n}")
+      (let ((original (buffer-string)))
+        (scss2-copy)
+        (should (equal (car kill-ring) statement))
+        (scss2-duplicate)
+        (should (equal (buffer-string)
+                       (concat ".a {\n  " statement "\n  " statement "\n  color: red;\n}")))
+        (undo-boundary)
+        (erase-buffer) (insert original) (goto-char 8)
+        (scss2-comment-uncomment)
+        (should (string-search (concat "  // " statement "\n") (buffer-string)))
+        (erase-buffer) (insert original) (goto-char 8)
+        (scss2-kill)
+        (should (equal (scss2-edit-test--with-point) ".a {\n  │color: red;\n}")))))
+  (dolist (mode '(css2-mode scss2-mode))
+    (scss2-edit-test--buffer mode "@import \"a.css\";\n@char│set \"utf-8\";\n.b {}"
+      (scss2-kill)
+      (should (equal (buffer-string) "@import \"a.css\";\n.b {}")))))
+
 (ert-deftest scss2-edit-unsupported-leaves-and-blank-space-never-select-parent ()
-  (dolist (source '(".a { @include fo│o(1, 2); }"
-                    ".a { @debug │1; }" ".a { @extend .ba│se; }"
-                    ".a { thi│ng(a:b); }" ".a {\n│  color: red;\n}"
+  (dolist (source '(".a { thi│ng(a:b); }" ".a {\n│  color: red;\n}"
                     ".a { color: red; │ }" ".a, │ .b { x: 1; }"
                     ".a { /* no│te */ color: red; }"))
     (dolist (command '(scss2-kill scss2-copy scss2-mark scss2-duplicate))

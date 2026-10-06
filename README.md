@@ -81,7 +81,7 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 
 | Command | Action |
 | --- | --- |
-| `scss2-kill` | Kill a selector branch, complete declaration, or at-rule block |
+| `scss2-kill` | Kill a selector branch, complete declaration, leaf statement such as `@include foo;`, or at-rule block |
 | `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration, map entry or `@return`-style value, or `@if` condition |
 | `scss2-copy` | Copy the same entity as kill |
 | `scss2-comment-uncomment` | Comment the entity, or uncomment an existing comment |
@@ -110,8 +110,9 @@ Candidates stay in the invoking window; label display follows Avy's usual behavi
   (keymap-set css2-mode-map "C-c e" #'scss2-expand))
 ```
 
-Entity commands require point to touch a token. Blank space and unsupported
-leaf statements do not select a containing rule; use `C-u` explicitly.
+Entity commands require point on an entity, including whitespace inside it.
+Blank space between statements and blank lines inside a value select nothing;
+use `C-u` to select a containing rule explicitly.
 Selector branches include nested pseudo-class selectors. Killing or commenting
 the only branch is rejected: select the whole rule with `C-u`. Comments between
 a killed branch and its comma remain in place. Empty stops at a comment or at

@@ -652,9 +652,9 @@ release eligibility, the registration test, the notifier assertion in
 The dialect parser cache, transactional guards, direct local module support and
 specialized identifier semantics serve current contracts. Dispatch is explicit,
 and the core and semantic suites run independently. Structural entity commands
-select only complete declarations, top-level selector branches, and statements
-with direct blocks. Value atoms, arguments,
-parameters, map entries and leaf at-rules are not independent targets. Explicit
+select complete declarations and other statements, including leaf at-rules such
+as `@include foo;`, and top-level selector branches. Value atoms, arguments,
+parameters and map entries are not independent targets. Explicit
 prefix selection resolves the nearest structural block; an else branch's entity
 is the complete conditional chain. Empty independently resolves bracket,
 interpolation and string interiors, complete declaration values (including
