@@ -158,9 +158,20 @@ Building it takes about 1 ms, so every buffer reuses one."
   (when-let* ((color (scss2--literal-color node)))
     (treesit-fontify-with-override
      (max start (treesit-node-start node)) (min end (treesit-node-end node))
-     (list :background color :foreground (readable-foreground-color color)
-           :box '(:line-width -1))
+     (scss2--color-face color)
      t)))
+
+(defun scss2--color-face (color)
+  "Return the preview face of hex COLOR, shared per color and terminal.
+On a terminal without 24-bit color, `readable-foreground-color' scans the
+terminal's whole color table on every call."
+  (let ((faces (or (terminal-parameter nil 'scss2--color-faces)
+                   (let ((table (make-hash-table :test #'equal)))
+                     (set-terminal-parameter nil 'scss2--color-faces table)
+                     table))))
+    (with-memoization (gethash color faces)
+      (list :background color :foreground (readable-foreground-color color)
+            :box '(:line-width -1)))))
 
 (defun scss2--literal-color (node)
   "Return the hex RGB color that NODE spells, or nil.
