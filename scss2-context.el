@@ -64,6 +64,26 @@ function never emits declarations; a --named CSS function has a body."
     (setq node (treesit-node-parent node)))
   node)
 
+(defun scss2-context--nested-names (owner)
+  "Return the names of the Sass nested property blocks from block OWNER outward.
+Control-flow and content blocks between them add no name, as in Sass.  The
+outermost name comes first and a dynamic name is nil.  Return nil outside
+nested property blocks."
+  (let (names)
+    (while (member (treesit-node-type owner)
+                   '("property_declaration" "if_statement" "else_clause" "each_statement"
+                     "for_statement" "while_statement" "include_statement"))
+      (when (equal (treesit-node-type owner) "property_declaration")
+        (push (scss2--identifier-name (treesit-node-child-by-field-name owner "name")) names))
+      (setq owner (scss2-context--block-owner (treesit-node-parent owner))))
+    names))
+
+(defun scss2-context--property-name (nested name)
+  "Return property NAME inside NESTED property names, as Sass compiles it.
+Return nil when any name is dynamic."
+  (unless (memq nil (cons name nested))
+    (mapconcat #'identity (append nested (list name)) "-")))
+
 (defun scss2-context--context (role beginning ending &rest properties)
   "Build a ROLE context at BEGINNING and ENDING with PROPERTIES."
   (append (list :role role :beg beginning :end ending) properties))
@@ -308,9 +328,10 @@ non-ASCII names."
               (= (point) end)))))
    (scss2--children node t)))
 
-(defun scss2-context--declaration-context (node beginning ending &optional media)
+(defun scss2-context--declaration-context (node beginning ending &optional media nested)
   "Describe the name or value of declaration NODE at BEGINNING and ENDING.
 MEDIA selects feature candidates instead of CSS property candidates.
+NESTED lists the Sass nested property names that prefix NODE's name.
 Read the colon after the name from the text: recovery can attach the next
 statement's colon to an unfinished value."
   (let* ((name (treesit-node-child-by-field-name node "name"))
@@ -320,7 +341,7 @@ statement's colon to an unfinished value."
                          (goto-char (treesit-node-end name))
                          (forward-comment (point-max))
                          (and (eq (char-after) ?:) (< (point) position))))))
-         (property (scss2--identifier-name name)))
+         (property (scss2-context--property-name nested (scss2--identifier-name name))))
     (scss2-context--context
      (if value (if media 'media-value 'property-value)
        (if media 'media-feature 'property))
@@ -459,6 +480,7 @@ recognized selector, literal or declaration owns its complete syntax."
                        (treesit-node-at opening (scss2--language))))))
          (declaration (scss2-context--containing node scss2--declaration-types))
          (sass (eq scss2-dialect 'scss))
+         (nested (and sass (scss2-context--nested-names owner)))
          (include (and sass (scss2-context--include-context node beginning ending)))
          (selector (scss2-context--selector-p node))
          (case-fold-search (eq scss2-dialect 'css)))
@@ -468,7 +490,8 @@ recognized selector, literal or declaration owns its complete syntax."
       (let* ((declaration (scss2--ancestor raw '("property_declaration" "feature_query")))
              (name (and declaration (treesit-node-child-by-field-name declaration "name"))))
         (scss2-context--context 'property-value beginning ending
-                                :property (scss2--identifier-name name))))
+                                :property (scss2-context--property-name
+                                           nested (scss2--identifier-name name)))))
      ((and (> beginning (point-min)) (eq (char-before beginning) ?@))
       (when (string-match-p "\\`@[[:alnum:]_-]*\\'" prefix)
         (scss2-context--context 'at-rule (1- beginning) ending :owner owner)))
@@ -494,7 +517,9 @@ recognized selector, literal or declaration owns its complete syntax."
      ((and declaration
            (let ((opening (scss2--child declaration "{")))
              (or (not opening) (<= (point) (treesit-node-start opening)))))
-      (plist-put (scss2-context--declaration-context declaration beginning ending)
+      (plist-put (scss2-context--declaration-context
+                  declaration beginning ending nil
+                  (and (equal (treesit-node-type declaration) "property_declaration") nested))
                  :at-rule (scss2--directive owner)))
      ;; Gaps and unfinished input have no complete node to establish their role.
      ((and sass (string-match "\\`@include[ \t\n]+\\(?:\\([[:alnum:]_.-]+\\)\\.\\)?\\([[:alnum:]_-]+\\)([^)]*\\'"
@@ -549,15 +574,18 @@ recognized selector, literal or declaration owns its complete syntax."
            (string-match "\\`\\([[:alnum:]_$-]+\\)[ \t]*:[ \t\n]*" prefix))
       (let ((property (match-string 1 prefix)))
         (unless (and (string-prefix-p "$" property) (not sass))
-          (scss2-context--context 'property-value beginning ending :property property))))
+          (scss2-context--context 'property-value beginning ending
+                                  :property (if (string-prefix-p "$" property) property
+                                              (scss2-context--property-name nested property))))))
      ((and (> beginning (point-min)) (eq (char-before beginning) ?:))
       (scss2-context--selector-context beginning ending))
      ((and (scss2--declaration-body-p owner)
            (not (string-match-p "\\`[.#&%>+~]" prefix))
            (or (string-match-p "\\`[[:alnum:]_-]*\\'" prefix)
                (scss2-context--abbreviation-p prefix '(?\s ?\t ?\; ?{ ?}))))
+      ;; Expansions write whole names, which a nested property would prefix again.
       (scss2-context--context 'property beginning ending
-                              :at-rule (scss2--directive owner) :start start))
+                              :at-rule (scss2--directive owner) :start (unless nested start)))
      ((string-prefix-p "@" prefix) nil)
      (t (scss2-context--selector-context beginning ending)))))
 

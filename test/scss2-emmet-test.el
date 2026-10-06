@@ -181,6 +181,22 @@
     (let ((position (point))) (scss2-mode) (goto-char position))
     (should-error (scss2-expand) :type 'user-error)))
 
+(ert-deftest scss2-emmet-declines-nested-property-names ()
+  ;; Sass would compile font-weight inside font: {} as font-font-weight.
+  (dolist (source '(".a { font: { wei| } }" ".a { font: bold { m10| } }"
+                    ".a { border: { left: { sty| } } }" ".a { font: { @if true { wei| } } }"
+                    ".a { font: { @include m { wei| } } }"))
+    (scss2-emmet-test--buffer source
+      (let ((position (point))) (scss2-mode) (goto-char position))
+      (should (eq (plist-get (scss2-context-at-point) :role) 'property))
+      (should-not (emmet2-context-analyze))
+      (should-not (scss2-completion-at-point))
+      (should-error (scss2-expand) :type 'user-error)))
+  (dolist (source '(".a { font: bold; m10| }" ".a { @if true { m10| } }"))
+    (scss2-emmet-test--buffer source
+      (let ((position (point))) (scss2-mode) (goto-char position))
+      (should (equal (plist-get (emmet2-context-analyze) :abbr) "m10")))))
+
 (ert-deftest scss2-emmet-allows-nested-declaration-bodies ()
   (scss2-emmet-test--buffer ".a { @media screen { m10| } }"
     (scss2-expand)

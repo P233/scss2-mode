@@ -868,6 +868,36 @@
       (scss2-completion-test--with dialect (car case)
         (should (eq (plist-get (scss2-context-at-point) :role) (cadr case)))))))
 
+(ert-deftest scss2-completion-nested-properties-use-full-names ()
+  (pcase-dolist (`(,source ,property ,candidate)
+                 '((".a { font: { weight: bo|; } }" "font-weight" "bold")
+                   (".a { border: { style: so|; } }" "border-style" "solid")
+                   (".a { font: bold { family: ser|; } }" "font-family" "serif")
+                   (".a { border: { left: { style: so|; } } }" "border-left-style" "solid")
+                   (".a { font: { family: url(x) ser|; } }" "font-family" "serif")
+                   (".a { font: { family: [a;b|]; } }" "font-family" nil)
+                   ;; Control flow and content blocks add no name.
+                   (".a { font: { @if true { weight: bo|; } } }" "font-weight" "bold")
+                   (".a { font: { @if a {} @else { weight: bo|; } } }" "font-weight" "bold")
+                   (".a { font: { @each $w in a { weight: bo|; } } }" "font-weight" "bold")
+                   (".a { font: { @include m { weight: bo|; } } }" "font-weight" "bold")
+                   (".a { @if true { weight: bo|; } }" "weight" nil)
+                   ;; Variables are not properties.
+                   (".a { font: { $x: in|; } }" "$x" nil)
+                   (".a { font: { $x: | } }" "$x" nil)))
+    (scss2-completion-test--with 'scss source
+      (ert-info (source)
+        (should (eq (plist-get (scss2-context-at-point) :role) 'property-value))
+        (should (equal (plist-get (scss2-context-at-point) :property) property))
+        (when candidate (should (member candidate (scss2-completion-test--names)))))))
+  ;; A dynamic part leaves the property unknown.
+  (scss2-completion-test--with 'scss ".a { #{$side}: { style: so|; } }"
+    (should (eq (plist-get (scss2-context-at-point) :role) 'property-value))
+    (should-not (plist-get (scss2-context-at-point) :property)))
+  ;; CSS has no nested properties.
+  (scss2-completion-test--with 'css ".a { font: { weight: bo|; } }"
+    (should (equal (plist-get (scss2-context-at-point) :property) "weight"))))
+
 (ert-deftest scss2-completion-trailing-comments-preserve-current-slot ()
   (dolist (case '((css "@supports(display:grid /*x*/ |){}" property-value "grid")
                   (css "@media(prefers-color-scheme:dark /*x*/ |){}" media-value "dark")

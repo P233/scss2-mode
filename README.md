@@ -144,6 +144,7 @@ Corfu is the supported frontend. Company works through standard `completion-at-p
 
 - Module completion reads local `@use` files, including unsaved edits in open buffers. It does not follow `@forward`, so a module that only forwards offers no names. Unqualified variables, functions, and mixins come only from the current file, not from `@import`ed files.
 - Built-in modules such as `sass:math`, package or load-path modules, and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: other completion functions do not run there, even without a match.
+- Inside a nested property such as `font: { weight: bold; }`, values complete under the full name (`font-weight`), but names are not completed: Emmet writes whole names, which Sass would prefix again. When the stylesheet ends inside an unclosed block, a nested property's outer names can be lost, so values may use a partial name and Emmet may offer whole names.
 - Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments, or an unclosed media group followed by another condition.
 - Parser limits ([full list](https://github.com/P233/tree-sitter-scss#known-limits)): escaped keywords such as `@m\65 dia` are read as ordinary names, and typed `attr()` unions such as `type(<length> | <percentage>)` do not parse.
 - In a media or container query, a feature name continued by interpolation, as in `(max-#{$side} > 1px)`, colors as a value rather than a property.
