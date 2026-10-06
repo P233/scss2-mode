@@ -146,7 +146,9 @@
                    (unless (member "flex" candidates)
                      (error "Value completion did not offer flex: %S" candidates))))
                (unless (featurep 'emmet2-css-data)
-                 (error "Value completion did not load Emmet's CSS data"))))
+                 (error "Value completion did not load Emmet's CSS data"))
+               (when (featurep 'css-mode)
+                 (error "Opening a stylesheet and completing loaded css-mode"))))
            (status
             (call-process (expand-file-name invocation-name invocation-directory)
                           nil t nil "-Q" "--batch" "--eval" (prin1-to-string program))))

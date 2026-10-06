@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: P233/emmet2-mode
-          ref: a4bfb6f9015e42c5cf26706a4cebc481eb6d6961
+          ref: d58969af2ebfac7c03a4444e9530754c3b79b055
           path: .dependencies/emmet2-mode
       - name: Check editor and first package installation
         env:
