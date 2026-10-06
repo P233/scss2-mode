@@ -33,13 +33,13 @@ literal components are shown.  Set this before entering `scss2-mode' or
   :type 'boolean
   :group 'scss2)
 
-(defcustom scss2-fontify-details t
-  "Whether to highlight numbers, operators and punctuation.
-Numbers use the number face and units use the type face.
-Expression operators use the value face.
-When nil, retain names, keywords, strings, comments and escapes, using
-fewer text-property intervals in large buffers.  Parsing, completion and
-structural editing are unchanged.
+(defcustom scss2-fontify-details nil
+  "Whether to highlight numbers, commas and member dots.
+They use the number and delimiter faces, which Emacs's default theme and
+many others leave plain, so nil saves text-property intervals without a
+visible change.  Either way, units use the type face, operators keep their
+faces, and so do names, keywords, strings, comments and escapes.  Parsing,
+completion and structural editing are unchanged.
 Set this before entering `scss2-mode' or `css2-mode'.  Reopen existing
 buffers after changing it so their old fontification intervals are freed."
   :type 'boolean
@@ -100,8 +100,7 @@ buffers after changing it so their old fontification intervals are freed."
             (error "Unmapped SCSS highlight capture: %s" capture))
           (replace-match
            (if (and (not scss2-fontify-details)
-                    (member capture '("number" "operator" "operator.expression"
-                                      "punctuation.bracket" "punctuation.delimiter")))
+                    (member capture '("number" "punctuation.bracket" "punctuation.delimiter")))
                ""
              (concat "@" (symbol-name face)))
            t t))))

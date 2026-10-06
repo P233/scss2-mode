@@ -10,7 +10,7 @@
   `(with-temp-buffer
      (rename-buffer "scss2-highlighting-test" t)
      (insert ,text)
-     (let ((scss2-fontify-colors nil))
+     (let ((scss2-fontify-colors nil) (scss2-fontify-details t))
        (funcall ,mode)
        (let ((noninteractive nil)) (font-lock-mode 1))
        (font-lock-ensure)

@@ -184,7 +184,7 @@
       ;; Comments between the value and `<` keep the feature name's property role.
       (insert "@media (1px " (apply #'concat (make-list 4096 "/**/ "))
               "< width) { .a { color: red; } }")
-      (let ((scss2-fontify-colors nil))
+      (let ((scss2-fontify-colors nil) (scss2-fontify-details t))
         (funcall mode)
         (let ((noninteractive nil)) (font-lock-mode 1))
         (should (eq font-lock-ensure-function #'jit-lock-fontify-now))

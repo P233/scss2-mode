@@ -11,6 +11,7 @@
   `(with-temp-buffer
      (insert ,source)
      (let ((scss2-fontify-colors nil)
+           (scss2-fontify-details t)
            (treesit-font-lock-level 4)
            (scss2-indent-offset 2)
            (indent-tabs-mode nil))

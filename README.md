@@ -123,7 +123,7 @@ and the kill ring. See the [structural edge cases](docs/architecture.md#decision
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `scss2-enable-emmet` | `t` | `nil` disables abbreviations and keeps semantic completion |
-| `scss2-fontify-details` | `t` | `nil` leaves numbers, operators, commas, and member dots unhighlighted to save highlighting memory in large files (brackets, `:`, and `;` are never highlighted); set it before opening buffers |
+| `scss2-fontify-details` | `nil` | `t` also highlights numbers, commas, and member dots, which many themes, including Emacs's default, show plain; `nil` saves about 15% of highlighting memory. Units and operators are always highlighted, and brackets, `:`, and `;` never; set it before opening buffers |
 | `scss2-idle-release-delay` | `30` | Idle seconds before buffers shown in no window release their syntax trees and highlighting, keeping text and undo; `nil` keeps everything |
 | `scss2-grammar-cache-directory` | `tree-sitter/scss2-mode/` in `user-emacs-directory` | Where the compiled parser is stored |
 | `CC` (environment) | `cc` | Compiler command, split like a shell command: `ccache cc` and `cc -m64` work; quote a path containing spaces |
