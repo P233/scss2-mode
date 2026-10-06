@@ -464,7 +464,7 @@ With prefix BLOCK, duplicate the nearest complete structural block."
   "Select the entity; repeated calls keep the same selection.
 With prefix BLOCK, select the nearest complete structural block."
   (interactive "P")
-  (unless (and (eq last-command 'scss2-mark) (region-active-p))
+  (unless (and (not block) (eq last-command 'scss2-mark) (region-active-p))
     (let ((target (scss2--resolve-target (and block 'block))))
       (goto-char (scss2--target-beg target))
       (push-mark (scss2--target-end target) t)

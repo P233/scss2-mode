@@ -557,6 +557,15 @@
     (scss2-kill t)
     (should (equal (buffer-string) ""))))
 
+(ert-deftest scss2-edit-prefixed-mark-after-mark-selects-the-block ()
+  (scss2-edit-test--buffer 'scss2-mode ".a {\n  co│lor: red;\n}"
+    (let ((transient-mark-mode t))
+      (scss2-mark)
+      (let ((last-command 'scss2-mark))
+        (scss2-mark t))
+      (should (equal (buffer-substring-no-properties (point) (mark))
+                     ".a {\n  color: red;\n}")))))
+
 (ert-deftest scss2-edit-blank-line-inside-a-value-touches-nothing ()
   (dolist (source '("$map: (\n  a: 1,\n│\n  b: 2,\n);"
                     "@each $k, $v in (\n  a: 1,\n│\n  b: 2,\n) { x: $v; }"))
