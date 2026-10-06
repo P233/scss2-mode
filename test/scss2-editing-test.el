@@ -27,13 +27,19 @@
     (let ((face (get-text-property (+ (match-beginning 0) (or offset 0)) 'face)))
       (if (listp face) face (list face)))))
 
+(defconst scss2-editing-test--uncaptured-punctuation
+  '(":" ";" "{" "}" "(" ")" "[" "]")
+  "Tokens the shared query leaves unfontified outside pseudo-classes.")
+
 (defun scss2-editing-test--assert-covered ()
   "Check actual fontification, including characters inside parent captures."
   (let (uncovered)
     (goto-char (point-min))
     (while (and (< (length uncovered) 12)
                 (re-search-forward "[^ \t\r\n\f]" nil t))
-      (unless (get-text-property (match-beginning 0) 'face)
+      (unless (or (get-text-property (match-beginning 0) 'face)
+                  (member (treesit-node-type (treesit-node-at (match-beginning 0)))
+                          scss2-editing-test--uncaptured-punctuation))
         (push (list (line-number-at-pos) (match-string 0)) uncovered)))
     (should-not (nreverse uncovered))))
 

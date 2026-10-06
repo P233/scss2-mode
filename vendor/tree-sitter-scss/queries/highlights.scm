@@ -36,8 +36,7 @@
 [(string) (raw_text)] @string
 (escape_sequence) @string.escape
 
-["{" "}" "(" ")" "[" "]"] @punctuation.bracket
-[":" ";" "," "|"] @punctuation.delimiter
+["," "|"] @punctuation.delimiter
 
 ; Context overrides
 ; Emacs applies this section after base captures, preserving contextual roles.

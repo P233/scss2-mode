@@ -210,7 +210,7 @@ COMMANDS default to the bindings of C-M-a and C-M-e."
         (dolist (text '("\\41 " "\\42 "))
           (should (eq (scss2-mode-test--face text) 'font-lock-escape-face)))
         (dolist (text '("[" "]"))
-          (should (eq (scss2-mode-test--face text) 'font-lock-bracket-face)))
+          (should-not (scss2-mode-test--face text)))
         (should (eq (scss2-mode-test--face "a\\41") 'font-lock-string-face))
         (should (eq (scss2-mode-test--face "foo") 'font-lock-constant-face))
         (should (eq (scss2-mode-test--face "comment") 'font-lock-comment-face))))))

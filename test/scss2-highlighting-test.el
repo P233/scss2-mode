@@ -39,7 +39,7 @@
       (dolist (text '(".class#id::before" "a:hover" ":not" ".muted" ":is" "#x" "data-x"))
         (scss2-highlighting-test--face text 'scss2-selector))
       (scss2-highlighting-test--face "\"word\"" 'font-lock-string-face)
-      (scss2-highlighting-test--face "[" 'font-lock-bracket-face)
+      (scss2-highlighting-test--face "[" nil)
       (scss2-highlighting-test--face "=" 'font-lock-operator-face))))
 
 (ert-deftest scss2-highlighting-selector-interpolation-keeps-its-faces ()
@@ -66,7 +66,7 @@
                      offset)))
       (scss2-highlighting-test--face " - " 'font-lock-constant-face 1)
       (scss2-highlighting-test--face "calc" 'font-lock-function-name-face)
-      (scss2-highlighting-test--face ":" 'font-lock-delimiter-face))))
+      (scss2-highlighting-test--face ":" nil))))
 
 (ert-deftest scss2-highlighting-numbers-preserve-other-semantic-roles ()
   (dolist (mode '(scss2-mode css2-mode))
