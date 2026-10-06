@@ -12,10 +12,11 @@
 (require 'scss2-test-support)
 
 (defun scss2-grammar-test--first-candidate (language)
-  "Return the first file Emacs tries to load for LANGUAGE."
+  "Return the first file with a suffix that Emacs tries to load for LANGUAGE."
   ;; Emacs searches extra paths, then the user directory, and tries the last suffix first.
+  ;; GNU/Linux lists an empty suffix last, and no grammar library is written without one.
   (expand-file-name (concat (cadr (assq language treesit-load-name-override-list))
-                            (car (last dynamic-library-suffixes)))
+                            (car (last (remove "" dynamic-library-suffixes))))
                     (or (car treesit-extra-load-path)
                         (expand-file-name "tree-sitter/" user-emacs-directory))))
 
