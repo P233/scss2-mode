@@ -589,6 +589,20 @@
     (scss2-empty)
     (should (equal (buffer-string) "$m: (a: 1, b: );"))))
 
+(ert-deftest scss2-edit-empty-clears-value-statement-values ()
+  (dolist (case '(("@function f() { @return $fo│o + 1; }" "@function f() { @return │; }" "$foo + 1")
+                  ("@function f() { @re│turn $foo; }" "@function f() { @return │; }" "$foo")
+                  ("@function f() { @return /* c */ $fo│o }" "@function f() { @return │ }" "/* c */ $foo")
+                  ("@deb│ug $x;" "@debug │;" "$x")
+                  ("@warn \"x\" + $fo│o;" "@warn │;" "\"x\" + $foo")
+                  ("@error \"e #{$a}\" fo│o;" "@error │;" "\"e #{$a}\" foo")
+                  ;; Nested interiors remain closer targets.
+                  ("@function f() { @return \"a│b\"; }" "@function f() { @return \"│\"; }" "ab")))
+    (scss2-edit-test--buffer 'scss2-mode (car case)
+      (scss2-empty)
+      (should (equal (scss2-edit-test--with-point) (nth 1 case)))
+      (should (equal (car kill-ring) (nth 2 case))))))
+
 (ert-deftest scss2-edit-empty-clears-map-entry-values ()
   (dolist (case '(("$m: (sm│all: 576px, medium: 768px);" "$m: (small: │, medium: 768px);" "576px")
                   ("$m: (small: 57│6px, medium: 768px);" "$m: (small: │, medium: 768px);" "576px")

@@ -505,9 +505,12 @@ trailing blanks after an unclosed block still belong to it."
   "Return the trimmed right-hand side of NODE's colon as (BEG . END).
 NODE is a declaration, feature query, parameter, named argument or map
 entry.  Exclude the direct colon, semicolon and nested-property block.
+For a value statement such as @return, return what follows the directive.
 Include flags such as !important.  An empty value has equal beginning and
 end."
-  (let (begin end)
+  (let ((begin (and (equal (treesit-node-type node) "value_statement")
+                    (treesit-node-end (treesit-node-child node 0))))
+        end)
     (dolist (child (scss2--children node))
       (let ((type (treesit-node-type child)))
         (cond

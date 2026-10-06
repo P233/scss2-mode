@@ -82,7 +82,7 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 | Command | Action |
 | --- | --- |
 | `scss2-kill` | Kill a selector branch, complete declaration, or at-rule block |
-| `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration or map entry value, or `@if` condition |
+| `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration, map entry or `@return`-style value, or `@if` condition |
 | `scss2-copy` | Copy the same entity as kill |
 | `scss2-comment-uncomment` | Comment the entity, or uncomment an existing comment |
 | `scss2-duplicate` | Duplicate the entity with its comma or statement separator |

@@ -224,7 +224,8 @@ For map NODE, use its entry that ends at point, before a comma or `)'."
                              (and (member (treesit-node-type node) scss2--declaration-types)
                                   (scss2--value-bounds node))))
                        (scss2--block-bounds node)
-                       (and (member (treesit-node-type node) scss2--declaration-types)
+                       (and (member (treesit-node-type node)
+                                    (cons "value_statement" scss2--declaration-types))
                             (scss2--value-bounds node))))
              ;; Unsupported leaf statements never empty their parent block.
              (setq node nil))
@@ -400,7 +401,8 @@ With prefix BLOCK, kill the nearest complete structural block instead."
 (defun scss2-empty (&optional block)
   "Kill the nearest delimited interior, declaration value or if condition.
 Brackets, interpolation and string quotes delimit interiors.  A map entry
-empties its value as a declaration does.
+empties its value as a declaration does, and @return, @debug, @warn and
+@error empty the value that follows them.
 With prefix BLOCK, clear the nearest structural block's body."
   (interactive "P")
   (let ((target (scss2--content-target block)))

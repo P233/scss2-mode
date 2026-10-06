@@ -654,7 +654,8 @@ parameters, map entries and leaf at-rules are not independent targets. Explicit
 prefix selection resolves the nearest structural block; an else branch's entity
 is the complete conditional chain. Empty independently resolves bracket,
 interpolation and string interiors, complete declaration values (including
-flags), map entry values, and all siblings of an if condition field. A call's
+flags), map entry values, the values of @return, @debug, @warn and @error,
+and all siblings of an if condition field. A call's
 name selects its arguments, except directly inside interpolation, where it
 selects the interpolation. Its output can be intentionally incomplete.
 
