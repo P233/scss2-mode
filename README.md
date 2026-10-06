@@ -142,7 +142,7 @@ Corfu is the supported frontend. Company works through standard `completion-at-p
 - Built-in modules such as `sass:math`, package or load-path modules, and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: other completion functions do not run there, even without a match.
 - Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments, or an unclosed media group followed by another condition.
 - Parser limits ([full list](https://github.com/P233/tree-sitter-scss#known-limits)): escaped keywords such as `@m\65 dia` are read as ordinary names, and typed `attr()` unions such as `type(<length> | <percentage>)` do not parse.
-- In a media or container query, a comment right after `(`, after a sign or beside the feature name, as in `(/* c */ hover)`, colors the feature name as a value rather than a property.
+- In a media or container query, a feature name continued by interpolation, as in `(max-#{$side} > 1px)`, colors as a value rather than a property.
 - Internet Explorer–only syntax is not supported: the `*` property hack, `alpha(opacity=50)` arguments, `progid:` filters and `expression()` parse as local errors.
 - Each open buffer keeps a syntax tree of tens of bytes per source byte, so several large files use noticeably more memory than `scss-mode`; buffers shown in no window release it after `scss2-idle-release-delay`.
 

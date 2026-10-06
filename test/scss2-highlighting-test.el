@@ -68,6 +68,16 @@
       (scss2-highlighting-test--face "calc" 'font-lock-function-name-face)
       (scss2-highlighting-test--face ":" nil))))
 
+(ert-deftest scss2-highlighting-query-feature-names-keep-the-property-face ()
+  (dolist (mode '(scss2-mode css2-mode))
+    (scss2-highlighting-test--with-buffer mode
+        "@media (/* c */ hover) and (width /* c */ > 1px) and (1px < /* c */ height) and (--x) { a { b: c; } }"
+      (dolist (text '("hover" "width" "height"))
+        (scss2-highlighting-test--face text 'scss2-property))
+      ;; A custom `--' name stays a variable even as a query feature.
+      (scss2-highlighting-test--face "--x" 'font-lock-variable-name-face)
+      (scss2-highlighting-test--face "1px" 'font-lock-number-face 0))))
+
 (ert-deftest scss2-highlighting-numbers-preserve-other-semantic-roles ()
   (dolist (mode '(scss2-mode css2-mode))
     (scss2-highlighting-test--with-buffer mode

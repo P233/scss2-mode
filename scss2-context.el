@@ -372,15 +372,17 @@ BEGINNING and ENDING bound the identifier being completed."
                  (range (cl-some (lambda (child)
                                    (member (treesit-node-text child t) '("<" ">" "<=" ">=" "=")))
                                  children))
-                 ;; A direct identifier is the feature slot in a range.  Its
-                 ;; identity cannot depend on the completion catalog knowing it.
-                 (name (cl-find "plain_value" children :key #'treesit-node-type :test #'equal))
+                 ;; A complete group names its feature; an incomplete one's direct identifier
+                 ;; is the slot.  Neither depends on the completion catalog knowing it.
+                 (identifiers '("property_name" "plain_value"))
+                 (name (or (cl-find "property_name" children :key #'treesit-node-type :test #'equal)
+                           (cl-find "plain_value" children :key #'treesit-node-type :test #'equal)))
                  (current (cl-find-if
                            (lambda (child)
                              (<= (treesit-node-start child) (point) (treesit-node-end child)))
                            children))
                  (value (and range
-                             (or (and current (not (equal (treesit-node-type current) "plain_value")))
+                             (or (and current (not (member (treesit-node-type current) identifiers)))
                                  (and name (not (eq current name)))))))
             (scss2-context--context
              (cond (compound 'media-keyword)
