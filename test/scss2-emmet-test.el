@@ -364,6 +364,22 @@
     (narrow-to-region (point-min) (point))
     (should (equal (plist-get (emmet2-context-analyze) :abbr) "m10"))))
 
+(ert-deftest scss2-emmet-font-lock-view-invalidates-native-candidates ()
+  (scss2-emmet-test--buffer ".a {\n  m10|\n}"
+    (let ((source (buffer-string)))
+      ;; Only the widened view sees the rule that makes m10 a declaration.
+      (narrow-to-region (line-beginning-position) (point))
+      (let* ((queried (nth 2 (scss2-emmet-completion-at-point)))
+             (exit (plist-get (nthcdr 3 (scss2-emmet-completion-at-point)) :exit-function)))
+        (should (all-completions "m10" queried))
+        (setq-local font-lock-dont-widen t)
+        (should-not (emmet2-context-analyze))
+        (should-not (all-completions "m10" queried))
+        ;; Acceptance revalidates a table that no query has invalidated.
+        (funcall exit "m10" 'finished)
+        (widen)
+        (should (equal (buffer-string) source))))))
+
 (ert-deftest scss2-emmet-dispatcher-analyzes-once-without-retaining-context ()
   (dolist (input '("m1" "dis" "ovh,ta"))
     (scss2-emmet-test--buffer (concat ".a { " input "| }")

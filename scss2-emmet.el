@@ -34,8 +34,10 @@ Set nil to retain semantic completion without abbreviation candidates."
               (list :analyze #'scss2-emmet--analysis :revision #'scss2-emmet--revision)))
 
 (defun scss2-emmet--revision ()
-  "Return immutable non-text inputs to the host's abbreviation policy."
-  (list scss2-enable-emmet scss2-dialect scss2--parser-language scss2-indent-offset))
+  "Return immutable non-text inputs to the host's abbreviation policy.
+`font-lock-dont-widen' selects the view that context analysis reads."
+  (list scss2-enable-emmet scss2-dialect scss2--parser-language scss2-indent-offset
+        font-lock-dont-widen))
 
 (defun scss2-emmet--provider-p ()
   "Whether Emmet is using this stylesheet's context provider."
