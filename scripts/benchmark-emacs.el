@@ -79,7 +79,7 @@
       (garbage-collect)
       (let ((gc-cons-threshold most-positive-fixnum)
             (gc-cons-percentage 1.0)
-            (css-fontify-colors nil)
+            (scss2-fontify-colors nil)
             (buffer (generate-new-buffer "scss2-benchmark")))
         (unwind-protect
             (with-current-buffer buffer
@@ -127,14 +127,14 @@
                   (when (>= run scss2-benchmark--warmups)
                     (push (car elapsed) key-update)
                     (push (cadr elapsed) key-fontify))
-                  (unless (eq (get-text-property position 'face) 'css-property)
+                  (unless (eq (get-text-property position 'face) 'scss2-property)
                     (error "Edited map key lost its face"))))
               (unless (equal digest (scss2-benchmark--faces))
                 (error "Incremental edits changed face spans: %s" name)))
           (kill-buffer buffer))))
     (when (getenv "SCSS2_BENCH_PROFILE")
       (let ((buffer (generate-new-buffer "scss2-profile"))
-            (css-fontify-colors nil)
+            (scss2-fontify-colors nil)
             (gc-cons-threshold most-positive-fixnum)
             (functions '(scss2--fontify-context
                          treesit-query-capture

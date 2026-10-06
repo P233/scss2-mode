@@ -7,13 +7,14 @@
 ;; The reading of the bundled grammar that context, completion and structural
 ;; editing share: parser access, identities, statements, blocks, values and
 ;; recovered scopes.  A rule needed by two features lives here; a feature
-;; keeps only the type tables that it alone uses.  Syntax setup owns the buffer's
-;; dialect and parser identity; each command owns its transient derived ranges.
+;; keeps only the type tables that it alone uses.  Lexical setup owns the
+;; dialect's syntax table, comments and indentation, which need no parser;
+;; syntax setup owns the buffer's dialect and parser identity; each command
+;; owns its transient derived ranges.
 
 ;;; Code:
 
 (require 'cl-lib)
-(require 'css-mode)
 (require 'seq)
 (require 'scss2-grammar)
 (require 'treesit)
@@ -188,16 +189,63 @@ their own lifecycle."
         (puthash key (treesit-query-compile (car key) query t)
                  scss2--compiled-queries))))
 
+(defvar editorconfig-indent-size-vars)
+
+(defcustom scss2-indent-offset 2
+  "Columns of indentation for each nesting level or continued statement."
+  :type 'integer :safe #'integerp :group 'scss2)
+
+(defconst scss2--css-syntax-table
+  (let ((table (make-syntax-table)))
+    (modify-syntax-entry ?/ ". 14" table)
+    (modify-syntax-entry ?* ". 23b" table)
+    (modify-syntax-entry ?\" "\"" table)
+    (modify-syntax-entry ?\' "\"" table)
+    (pcase-dolist (`(,open . ,close) '((?{ . ?}) (?\( . ?\)) (?\[ . ?\])))
+      (modify-syntax-entry open (string ?\( close) table)
+      (modify-syntax-entry close (string ?\) open) table))
+    ;; Name prefixes and hyphens belong to symbols, so `.a-b' and `#x' move as one.
+    (dolist (char '(?@ ?# ?. ?-))
+      (modify-syntax-entry char "_" table))
+    (dolist (char '(?! ?$ ?% ?& ?+ ?, ?< ?> ?= ??))
+      (modify-syntax-entry char "." table))
+    table)
+  "Syntax table of CSS buffers.")
+
+(defconst scss2--scss-syntax-table
+  (let ((table (make-syntax-table scss2--css-syntax-table)))
+    (modify-syntax-entry ?/ ". 124" table)
+    (modify-syntax-entry ?\n ">" table)
+    (modify-syntax-entry ?$ "_" table)
+    (modify-syntax-entry ?% "_" table)
+    table)
+  "Syntax table of SCSS buffers, which add silent `//' comments.")
+
+(defun scss2-syntax-lexical-setup (dialect)
+  "Install DIALECT's syntax table, comments and indentation in this buffer.
+None of them needs a parser, so a buffer whose parser is unavailable or
+missing, such as a `clone-indirect-buffer' clone, still edits as a stylesheet."
+  (set-syntax-table (if (eq dialect 'scss) scss2--scss-syntax-table scss2--css-syntax-table))
+  (setq-local syntax-propertize-function #'scss2--syntax-propertize)
+  (if (eq dialect 'scss)
+      (setq-local comment-start "// " comment-end "" comment-continue " *"
+                  comment-start-skip "/[*/]+[ \t]*"
+                  comment-end-skip "[ \t]*\\(?:\n\\|\\*+/\\)")
+    (setq-local comment-start "/*" comment-end "*/"
+                comment-start-skip "/\\*+[ \t]*" comment-end-skip "[ \t]*\\*+/"))
+  (setq-local indent-line-function #'scss2--indent-line)
+  (setq-local editorconfig-indent-size-vars '(scss2-indent-offset))
+  (setq-local electric-indent-chars (append '(?\} ?\;) electric-indent-chars)))
+
 (defun scss2-syntax-setup (dialect)
-  "Initialize DIALECT after entering the buffer's base CSS/SCSS mode.
-Own the parser identity and lexical syntax shared by all stylesheet features.
+  "Create DIALECT's parser after `scss2-syntax-lexical-setup'.
+Own the parser identity shared by all stylesheet features.
 Major-mode changes let Emacs discard the previous parser and local settings."
   (setq-local scss2-dialect dialect)
   (setq-local scss2--parser-language (scss2-grammar-ensure dialect))
   (treesit-parser-add-notifier (treesit-parser-create scss2--parser-language)
                                #'scss2--mark-changed-ranges)
   (scss2--query '((raw_text) @raw))
-  (setq-local syntax-propertize-function #'scss2--syntax-propertize)
   (add-hook 'syntax-propertize-extend-region-functions
             #'syntax-propertize-wholelines nil t)
   (add-hook 'syntax-propertize-extend-region-functions
@@ -205,13 +253,19 @@ Major-mode changes let Emacs discard the previous parser and local settings."
   (unless scss2--idle-release-timer
     (scss2--schedule-idle-release)))
 
+(defconst scss2--unquoted-url-rules
+  (syntax-propertize-rules
+   ("url\\((\\)[[:space:]]*\\(?:\\\\.\\|[^()[:space:]\n'\"]\\)+[[:space:]]*\\()\\)"
+    (1 "|") (2 "|")))
+  "Make an unquoted URL one string, so `//' or quotes in it start nothing.")
+
 (defun scss2--syntax-propertize (start end)
-  "Apply SCSS syntax properties between START and END.
+  "Apply stylesheet syntax properties between START and END.
 Raw CSS and unquoted URLs cannot start silent comments.  Correct the
-inherited syntax table there so SMIE and comment commands see real code."
-  (funcall css-syntax-propertize-function start end)
-  ;; A `clone-indirect-buffer' clone has no parser; keep the base mode's syntax.
-  (when (treesit-parser-list nil (scss2--language))
+syntax table there so indentation and comment commands see real code."
+  (funcall scss2--unquoted-url-rules start end)
+  ;; A `clone-indirect-buffer' clone or a buffer without a grammar has no parser.
+  (when (and (scss2--language) (treesit-parser-list nil (scss2--language)))
     (dolist (node (scss2--with-font-lock-view
                     (treesit-query-capture
                      (scss2--root-node) (scss2--query '((raw_text) @raw)) start end t)))
@@ -220,6 +274,121 @@ inherited syntax table there so SMIE and comment commands see real code."
         (while (search-forward "/" (min end (treesit-node-end node)) t)
           (put-text-property (1- (point)) (point)
                              'syntax-table (string-to-syntax ".")))))))
+
+(defconst scss2--statement-containers '("stylesheet" "declaration_block" "ERROR")
+  "Nodes whose children are separate statements.")
+
+(defun scss2--indent-line ()
+  "Indent the current line as computed in Font Lock's view.
+Inside a comment or string the line keeps its indentation, except that a
+leading `*' aligns under the comment opener's star and a blank comment line
+takes the previous line's indentation."
+  (when-let* ((column (scss2--with-font-lock-view (scss2--line-indentation))))
+    (if (<= (current-column) (current-indentation))
+        (indent-line-to column)
+      (save-excursion (indent-line-to column)))))
+
+(defun scss2--line-indentation ()
+  "Return the column for the current line's first character, or nil."
+  (save-excursion
+    (back-to-indentation)
+    (let* ((state (syntax-ppss))
+           (opening (nth 1 state))
+           (base (if opening (scss2--opening-indentation opening) 0)))
+      (cond
+       ((nth 3 state) nil)
+       ((nth 4 state)
+        (cond ((eq (char-after) ?*)
+               (save-excursion (goto-char (nth 8 state)) (1+ (current-column))))
+              ((eolp) (save-excursion (forward-line -1) (current-indentation)))))
+       ((memq (char-after) '(?\} ?\) ?\])) base)
+       ((scss2--continued-statement opening))
+       (opening (or (scss2--sibling-indentation opening) (+ base scss2-indent-offset)))
+       (t 0)))))
+
+(defun scss2--sibling-indentation (opening)
+  "Return the indentation of the previous statement line inside OPENING, or nil.
+Following it keeps a block's own indentation when it differs from the offset."
+  (save-excursion
+    (catch 'found
+      (while (and (zerop (forward-line -1)) (> (point) opening))
+        (back-to-indentation)
+        (let* ((state (syntax-ppss))
+               (nested (cadr (memq opening (nth 9 state)))))
+          ;; Inside a nested bracket, resume at the line that opens it.
+          (when nested
+            (goto-char nested)
+            (back-to-indentation)
+            (setq state (syntax-ppss)))
+          (when (and (not (eolp)) (eql (nth 1 state) opening) (not (nth 8 state))
+                     (not (memq (char-after) '(?\} ?\) ?\])))
+                     (not (scss2--continued-statement opening)))
+            (throw 'found (current-indentation)))))
+      nil)))
+
+(defun scss2--opening-indentation (opening)
+  "Return the indentation that the bracket at OPENING nests from.
+A `{' nests from the first line of the statement it opens, which can be
+an earlier line of a selector list; other brackets nest from their line."
+  (save-excursion
+    (goto-char opening)
+    (when-let* (((eq (char-after) ?{))
+                (language (scss2--language))
+                ((treesit-parser-list nil language))
+                (brace (treesit-node-at opening language))
+                ((equal (treesit-node-type brace) "{"))
+                (owner (treesit-node-parent brace))
+                ((not (member (treesit-node-type owner) scss2--statement-containers))))
+      (goto-char (treesit-node-start owner)))
+    (current-indentation)))
+
+(defun scss2--continued-statement (opening)
+  "Return the column of point's line if it continues an earlier statement.
+OPENING is the innermost open bracket.  The next item of a selector list,
+an `@else' branch or a lone `{' aligns with the statement's first line;
+any other continuation indents once more."
+  (when-let* ((language (scss2--language))
+              (_ (treesit-parser-list nil language)))
+    (let* ((bol (point))
+           (previous (save-excursion (skip-chars-backward " \t\n") (point)))
+           ;; A blank line has no token: continue a trailing `,' or `:', else take the node around it.
+           (trailing (and (eolp) (memq (char-before previous) '(?, ?:))))
+           (node (cond (trailing (treesit-node-at (1- previous) language))
+                       ((eolp) (treesit-node-on bol bol language))
+                       (t (treesit-node-at bol language))))
+           statement)
+      (while (and node (> (treesit-node-start node) (or opening 0))
+                  (not (member (treesit-node-type node) scss2--statement-containers)))
+        (setq statement node node (treesit-node-parent node)))
+      (when (and statement (< (treesit-node-start statement) bol)
+                 (if trailing
+                     (member (treesit-node-type statement)
+                             '("property_declaration" "variable_declaration"))
+                   (< bol (treesit-node-end statement))))
+        (let* ((child (treesit-node-first-child-for-pos statement bol t))
+               (selectors (cond ((equal (treesit-node-type statement) "selectors") statement)
+                                ((and child (equal (treesit-node-type child) "selectors")) child)))
+               (item (and selectors (treesit-node-first-child-for-pos selectors bol t)))
+               ;; A line inside one selector of a list continues that selector.
+               (anchor (if (and item (< (treesit-node-start item) bol)) item statement)))
+          (cond
+           ;; A line that starts no earlier item's text begins the next one.
+           ((or (eq (char-after bol) ?{)
+                (and child (>= (treesit-node-start child) bol)
+                     (equal (treesit-node-type child) "else_clause"))
+                (and selectors (or (null item) (>= (treesit-node-start item) bol))))
+            (save-excursion (goto-char (treesit-node-start statement)) (current-indentation)))
+           ;; Later continuation lines follow the previous one, as typed.
+           ((save-excursion
+              (forward-line -1)
+              (while (and (looking-at-p "[ \t]*$") (> (point) (treesit-node-start anchor)))
+                (forward-line -1))
+              (back-to-indentation)
+              (and (> (point) (treesit-node-start anchor))
+                   (eql (nth 1 (syntax-ppss)) opening)
+                   (current-indentation))))
+           (t (+ (save-excursion (goto-char (treesit-node-start anchor)) (current-indentation))
+                 scss2-indent-offset))))))))
 
 (defun scss2--language ()
   "Return the language of this buffer's sole parser."

@@ -10,7 +10,7 @@
   `(with-temp-buffer
      (rename-buffer "scss2-highlighting-test" t)
      (insert ,text)
-     (let ((css-fontify-colors nil))
+     (let ((scss2-fontify-colors nil))
        (funcall ,mode)
        (let ((noninteractive nil)) (font-lock-mode 1))
        (font-lock-ensure)
@@ -37,7 +37,7 @@
     (scss2-highlighting-test--with-buffer mode
         ".class#id::before, a:hover, :not(.muted):is(#x), [data-x=\"word\"] { color: red; }"
       (dolist (text '(".class#id::before" "a:hover" ":not" ".muted" ":is" "#x" "data-x"))
-        (scss2-highlighting-test--face text 'css-selector))
+        (scss2-highlighting-test--face text 'scss2-selector))
       (scss2-highlighting-test--face "\"word\"" 'font-lock-string-face)
       (scss2-highlighting-test--face "[" 'font-lock-bracket-face)
       (scss2-highlighting-test--face "=" 'font-lock-operator-face))))
@@ -46,7 +46,7 @@
   (scss2-highlighting-test--with-buffer 'scss2-mode
       "%base, .card-#{$size}::before, #main-#{$name}, :nth-child(2n + 1 of .active) { color: red; }"
     (dolist (text '("%base" ".card-" "::before" "#main-" ":nth-child" ".active"))
-      (scss2-highlighting-test--face text 'css-selector))
+      (scss2-highlighting-test--face text 'scss2-selector))
     (scss2-highlighting-test--face "#{" 'font-lock-escape-face)
     (scss2-highlighting-test--face "$size" 'font-lock-variable-name-face)
     (scss2-highlighting-test--face "$name" 'font-lock-variable-name-face)
@@ -77,7 +77,7 @@
       (scss2-highlighting-test--face "px" 'font-lock-type-face)
       (scss2-highlighting-test--face "%" 'font-lock-type-face)
       (scss2-highlighting-test--face ">=" 'font-lock-operator-face)
-      (scss2-highlighting-test--face ".col-12" 'css-selector)
+      (scss2-highlighting-test--face ".col-12" 'scss2-selector)
       (scss2-highlighting-test--face "#123abc" 'font-lock-constant-face)
       (scss2-highlighting-test--face "U+00A0-00FF" 'font-lock-constant-face)
       (scss2-highlighting-test--face "\"123\"" 'font-lock-string-face)
@@ -182,7 +182,7 @@
       (should-not (treesit-node-check (scss2--root-node) 'has-error))
       (run-hook-with-args 'pre-redisplay-functions nil)
       (jit-lock-fontify-now)
-      (scss2-highlighting-test--face "a.a" 'css-selector)
+      (scss2-highlighting-test--face "a.a" 'scss2-selector)
       (let ((text (buffer-substring-no-properties (point-min) (point-max))))
         (should (equal (scss2-highlighting-test--faces)
                        (scss2-highlighting-test--with-buffer mode text

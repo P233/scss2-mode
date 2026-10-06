@@ -46,7 +46,7 @@ Open a `.scss` or `.css` file and Emacs selects the matching mode. If your confi
 
 The parser ships as C source. On first use, Emacs compiles it into a native library in `scss2-grammar-cache-directory`; there is no build command to run, Tree-sitter CLI, download, Node, or background service. Later sessions reuse the library; changed parser sources or another platform build a new one, while an update to the highlighting queries alone does not.
 
-A buffer larger than `treesit-max-buffer-size`, or a parser that cannot be built or loaded (for example, without a C compiler), shows a warning and keeps plain `scss-mode` or `css-mode` behavior; your mode hooks still run.
+A buffer larger than `treesit-max-buffer-size`, or a parser that cannot be built or loaded (for example, without a C compiler), shows a warning and keeps the dialect's syntax, comment commands, indentation and comment and string highlighting; your mode hooks still run.
 
 ## Everyday editing
 
@@ -54,7 +54,7 @@ A buffer larger than `treesit-max-buffer-size`, or a parser that cannot be built
 - **Complete at point** with `M-x completion-at-point` or a [frontend](#frontends); `M-x emmet2-complete` requests Emmet candidates only. Completion covers at-rules, property values, CSS functions, pseudo-selectors, media queries, local import paths, and custom properties in `var()`; SCSS adds visible variables, functions, mixins, named arguments, and members of local `@use` modules. Property names come only from Emmet expansion; class, ID, and tag names, and ordinary text in comments and strings, are not completed.
 - **Fuzzy matching:** `display: ib` offers `inline-block`. The `scss2` style, the default for the `scss2` completion category, also decodes CSS escapes and treats Sass `_` and `-` alike.
 - **Leave values with TAB:** anywhere in a property value, including nested functions, strings, URLs, and snippet fields, TAB jumps past the declaration's `;`, closing an open completion menu without accepting it. Elsewhere, or without an accessible `;`, TAB keeps its usual behavior.
-- **Familiar behavior:** built-in CSS/SCSS indentation and comment commands remain, and highlighting uses the theme's standard CSS and Font Lock faces.
+- **No `css-mode` underneath:** the modes neither load nor run Emacs's `css-mode`. They supply their own comment syntax, comment filling, color previews and indentation, which nests by `scss2-indent-offset`, follows a block's existing indentation, and indents continued values and selectors as Prettier does; EditorConfig's `indent_size` sets `scss2-indent-offset`, and `css-indent-offset` is not read. Code that asks `derived-mode-p` about `css-mode` or `scss-mode` still matches, but those modes' hooks and key bindings do not apply; use `scss2-mode-hook`, `css2-mode-hook` and their maps. Highlighting uses Font Lock faces, plus `scss2-selector` and `scss2-property`, so themes own the palette.
 
 To match with your own styles, override the category. Your styles then match raw spellings, so escaped queries such as `i\62` and Sass `_`/`-` equivalence find nothing:
 
@@ -116,8 +116,8 @@ and the kill ring. See the [structural edge cases](docs/architecture.md#decision
 | `scss2-idle-release-delay` | `30` | Idle seconds before buffers shown in no window release their syntax trees and highlighting, keeping text and undo; `nil` keeps everything |
 | `scss2-grammar-cache-directory` | `tree-sitter/scss2-mode/` in `user-emacs-directory` | Where the compiled parser is stored |
 | `CC` (environment) | `cc` | Compiler command, split like a shell command: `ccache cc` and `cc -m64` work; quote a path containing spaces |
-| `css-indent-offset` | built-in | Indentation width |
-| `css-fontify-colors` | built-in | CSS color previews |
+| `scss2-indent-offset` | `2` | Indentation width |
+| `scss2-fontify-colors` | `t` | Show hex colors, color names and literal `rgb()`/`hsl()` on their own color; set it before opening buffers |
 
 Idle-released data is rebuilt on next use, so returning to a large file can take longer.
 

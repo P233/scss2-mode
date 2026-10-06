@@ -6,7 +6,8 @@
 (defun scss2-test-setup-buffer (mode)
   "Set up MODE's real syntax without loading host composition or frontends."
   (let ((dialect (if (eq mode 'scss2-mode) 'scss 'css)))
-    (funcall (if (eq dialect 'scss) #'scss-mode #'css-mode))
+    (prog-mode)
+    (scss2-syntax-lexical-setup dialect)
     (scss2-syntax-setup dialect)))
 
 (defmacro scss2-test-with-buffer (mode source &rest body)
@@ -18,7 +19,7 @@ MODE names css2-mode or scss2-mode; no host mode or frontend is loaded."
      (goto-char (point-min))
      (search-forward "│")
      (delete-char -1)
-     (let ((position (point)) (css-fontify-colors nil))
+     (let ((position (point)) (scss2-fontify-colors nil))
        (scss2-test-setup-buffer ,mode)
        (goto-char position)
        ,@body)))

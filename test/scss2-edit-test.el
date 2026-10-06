@@ -439,7 +439,7 @@
                   (scss2-mode "@use 'theme' as t;\n$m: (a: 1, 'b': 2, c: (d e f));\n@mixin f($a: 1, $b: 'x') { @content; }\n.a {\n  @include f($a: 2, $b: t.$tone) using ($s) { x: $s; }\n  &:hover, .b { y: 1px 2px !important; }\n  @if $m { z: 1; } @else { z: 2; }\n  @at-root (without: media) { w: 1; }\n}\n")))
     (dolist (command '(scss2-kill scss2-duplicate scss2-comment-uncomment))
       (with-temp-buffer
-        (let ((source (cadr case)) (css-fontify-colors nil)
+        (let ((source (cadr case)) (scss2-fontify-colors nil)
               (interprogram-cut-function nil) (interprogram-paste-function nil)
               (kill-ring nil) (kill-ring-yank-pointer nil))
           (insert source)

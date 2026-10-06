@@ -13,7 +13,6 @@
 (require 'cl-lib)
 (require 'scss2-context)
 (require 'emmet2-mode)
-(defvar css-indent-offset)
 
 (defvar scss2-emmet--context nil
   "Context supplied by the dispatcher during one synchronous CAPF call.
@@ -36,7 +35,7 @@ Set nil to retain semantic completion without abbreviation candidates."
 
 (defun scss2-emmet--revision ()
   "Return immutable non-text inputs to the host's abbreviation policy."
-  (list scss2-enable-emmet scss2-dialect scss2--parser-language css-indent-offset))
+  (list scss2-enable-emmet scss2-dialect scss2--parser-language scss2-indent-offset))
 
 (defun scss2-emmet--provider-p ()
   "Whether Emmet is using this stylesheet's context provider."
@@ -60,7 +59,7 @@ the host only confirms a declaration insertion position."
                      (not (string-match-p "[$]\\|#{" text))))
         (append abbr (list :lang 'css :syntax scss2-dialect
                            :position 'declaration-start
-                           :indent-width css-indent-offset
+                           :indent-width scss2-indent-offset
                            :at-rule (plist-get context :at-rule)))))))
 
 ;;;###autoload

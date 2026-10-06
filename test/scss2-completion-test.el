@@ -11,7 +11,7 @@
      (goto-char (point-min))
      (search-forward "|")
      (delete-char -1)
-     (let ((position (point)) (css-fontify-colors nil))
+     (let ((position (point)) (scss2-fontify-colors nil))
        (funcall (if (eq ,dialect 'css) #'css2-mode #'scss2-mode))
        (goto-char position)
        ,@body)))

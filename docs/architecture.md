@@ -28,7 +28,7 @@ flowchart TD
 | Library | Responsibility and interface | State / excluded dependencies |
 | --- | --- | --- |
 | `scss2-grammar` | `scss2-grammar-ensure` loads a private dialect identity; compilation and disk cache | Owns native-source/platform identity, native artifacts and load verification; no editor feature dependencies |
-| `scss2-syntax` | `scss2-syntax-setup` initializes the parser and lexical properties; shared node/identity/range readers | Owns buffer dialect, loaded language and session-compiled internal queries; no completion, editing, host or Emmet dependency |
+| `scss2-syntax` | `scss2-syntax-lexical-setup` installs syntax table, comments and indentation without a parser; `scss2-syntax-setup` initializes the parser and syntax properties; shared node/identity/range readers | Owns buffer dialect, loaded language and session-compiled internal queries; no completion, editing, host or Emmet dependency |
 | `scss2-context` | `scss2-context-at-point` returns role, bounds and role-specific facts | Request-local reads only; no catalog, module I/O, host or Emmet dependency |
 | `scss2-completion` | `scss2-completion-for-context` consumes explicit context plus the current parsed buffer; supplies candidates and name identity to `emmet2-completion-capf` | Tables are session-local; no classifier, host mode or Emmet adapter dependency |
 | `scss2-edit` | Public structural commands and syntax-based TAB navigation | Targets live for one command; no context, completion or required frontend dependency |
@@ -58,8 +58,9 @@ interfaces above; private `--` helpers are owned by their library.
 
 ## Initialization and lifetime
 
-1. Enter the built-in `css-mode` or `scss-mode` base, retaining its indentation and
-   comment behavior. Emacs clears the previous major mode's local state/parsers.
+1. Enter `prog-mode`, then `scss2-syntax-lexical-setup` installs the dialect's
+   syntax table, comment syntax and indentation, none of which needs a parser.
+   Emacs clears the previous major mode's local state/parsers.
 2. `scss2-syntax-setup` selects the dialect and private grammar generation, creates
    its parser with a change notifier (see
    [Changed ranges of early reparses](#changed-ranges-of-early-reparses)) and
@@ -73,9 +74,10 @@ Like built-in tree-sitter modes, full mode composition checks readiness before
 step 2. A buffer larger than `treesit-max-buffer-size` gets the standard
 `treesit` warning; a grammar that cannot be built or loaded (no C compiler, an
 Emacs without tree-sitter, an unwritable cache) gets an `scss2` warning with
-the build error. Either way the buffer skips steps 2-3, keeps its base mode with
-`scss2-dialect` nil and still runs its mode hooks, so globalized minor modes
-such as Font Lock turn on. `scss2-syntax-setup` makes neither check and
+the build error. Either way the buffer skips steps 2-3, keeps step 1's lexical
+editing and syntactic highlighting of comments and strings with `scss2-dialect`
+nil, and still runs its mode hooks, so globalized minor modes such as Font Lock
+turn on. `scss2-syntax-setup` makes neither check and
 signals; syntax-only clients own that policy. A missing Emmet2 host API still
 signals: it means a mismatched source installation, not an environment to
 degrade in.
@@ -89,8 +91,8 @@ remap into a `menu-item` whose filter, `scss2--tree-binding`, returns the
 command only where `treesit-primary-parser` is set. Only
 `treesit-major-mode-setup` sets it, so oversized buffers and buffers whose setup
 failed are excluded. Elsewhere the filter returns the parent keymaps' remap,
-because a nil result would shadow remaps in `css-mode-map`, `scss-mode-map` or
-`prog-mode-map`; a larger buffer keeps the base mode's `C-M-a` and `C-M-e`.
+because a nil result would shadow remaps in `prog-mode-map`; a larger buffer
+keeps `prog-mode`'s `C-M-a` and `C-M-e`.
 Help listings that render keymaps in a temporary buffer, such as `C-h m` and
 `\{scss2-mode-map}`, therefore omit the scoped remaps; `C-h b` and `C-h f` in a
 parsed buffer still show them. The remap scoping is INTERIM until treesit.el
@@ -110,8 +112,9 @@ Expression operators retain the value face.
 Compact highlighting keeps the unit face while omitting numbers.
 The `number` and `unit` nodes and their ranges remain separate in the parser,
 independent of color, for syntax consumers and numeric editing.
-Selectors and properties use the built-in `css-selector` and `css-property`
-faces. The remaining roles use standard Font Lock faces, so themes own the
+Selectors and properties use `scss2-selector` and `scss2-property`, which
+inherit the function-name and keyword faces as css-mode's selector and property
+faces do. The remaining roles use standard Font Lock faces, so themes own the
 palette without a mode-specific color scheme or theme dependency.
 
 The buffer's grammar identity stays fixed even if loading a newer package changes
@@ -138,6 +141,49 @@ and their bases are excluded. Parsers with custom ranges, other packages'
 notifiers, or additional parsers also remain untouched because they have other
 lifecycle owners; the mode's own change notifier does not count. Cleanup does
 not force GC; freed allocations can remain resident in Emacs's allocator.
+
+### Lexical editing without css-mode
+
+The modes derive from `prog-mode` and declare `scss-mode`, `css-mode` and
+`css-base-mode` as extra parents with `derived-mode-add-parents`, as
+`css-ts-mode` does for `css-mode`. `derived-mode-p`, directory-local variables
+and Emmet's CSS host checks therefore treat them as CSS buffers without loading
+css-mode; those modes' hooks and keymaps do not apply. css-mode pulls in eww,
+shr, sgml-mode and SMIE. In a fresh `emacs -Q` session, requiring the
+byte-compiled package with Emmet took 130–135 ms and added 4.7 MB of live Lisp
+heap and 89 features while it did; without it, 25–28 ms, 1.7 MB and 39 features.
+Emmet2 still loads css-mode for styles embedded in another host and to color a
+multi-line CSS completion preview, so the first such preview pays that load.
+
+Indentation reads bracket depth from `syntax-ppss`, so it works without a parser,
+as in a clone or after a grammar failure. Inside a bracket, a statement follows
+the previous statement line of the block, or else nests `scss2-indent-offset`
+from the line that starts the bracket's statement; a closer returns to that
+line. With a parser, a line that continues a statement indents once more from
+the statement, or from the first line of the selector it continues, and later
+continuation lines follow the previous one; the next selector of a list, an
+`@else` branch and a lone `{` align with the statement. A blank line after a
+trailing `,` or `:` continues that declaration. A line that starts with `*` in
+a block comment aligns under the opener's star; other comment and string lines
+keep their indentation. Reindenting the 335-file corpus at each file's own width
+changes 3 of 35,168 nonblank lines, all nested space-separated continuations that
+Prettier indents further, against 65 with css-mode's SMIE rules. At 10,703 line
+ends, a newline gets SMIE's column except in 2 cases where SMIE left an
+unfinished comma-separated value; typing a declaration and `}` after a `{`
+returns `}` to the opening line in all 1,857 cases.
+
+Comment filling adapts the comment branch of css-mode's `css-fill-paragraph`
+and its adaptive fill prefix. Filling in code changes nothing, where css-mode
+reformatted the declaration block. EditorConfig's `indent_size` sets
+`scss2-indent-offset`; `css-indent-offset` is not read. css-mode's color format
+cycling and MDN lookup are not provided.
+
+With `scss2-fontify-colors`, a last font-lock rule shows hex colors, CSS color
+names (from `shr-color`) and `rgb()`, `rgba()`, `hsl()` and `hsla()` calls with
+literal components on their own color, as css-mode's `css-fontify-colors` did;
+over the corpus both mark the same 1,177 spans. Fontifying the 73 KB fixture in
+1,500-character chunks takes 0.28 ms per chunk with previews, against 0.49 ms
+with css-mode's regexp pass and 0.21 ms without previews.
 
 ## Completion flow
 
@@ -225,7 +271,7 @@ an integration contract exercising both on the same unclosed callable.
   structural targets. Commands then act only inside the caller's restriction.
   Hooks that Emacs runs on its own read the tree only when the buffer has its
   own scss2 parser; otherwise, as in a `clone-indirect-buffer` clone, they keep
-  the base mode's behavior.
+  lexical editing: syntax, comments and bracket-based indentation.
 - Every reparse after a text change marks the ranges it changed for
   refontification and extends the next syntax propertization back to them
   within that caller's restriction, whichever reader caused it; idle release's
@@ -685,9 +731,9 @@ value selection work in batch checks. Batch checks do not cover GUI drawing.
 
 `clone-indirect-buffer` copies a buffer's local syntax hooks but not its parser.
 `scss2--extend-to-changed-start` and `scss2--syntax-propertize` therefore read
-the tree only when the buffer has its own scss2 parser. A clone keeps base-mode
-syntax, indentation, comments and motion, and the faces it shares with its
-base, without tree features; raw-text `//` is not corrected there. Re-running
+the tree only when the buffer has its own scss2 parser. A clone keeps lexical
+syntax, bracket-based indentation, comments and motion, and the faces it shares
+with its base, without tree features; raw-text `//` is not corrected there. Re-running
 the mode from `clone-indirect-buffer-hook` was rejected: in Emacs 31.1 a killed
 indirect buffer's parser leaks into its base (upstream report draft 02, in
 tree-sitter-scss `plans/upstream-reports/`), and a base with two parsers is

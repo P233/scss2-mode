@@ -19,9 +19,13 @@
 (require 'css2-mode)
 
 ;;;###autoload
-(define-derived-mode scss2-mode scss-mode "SCSS[ts]"
+(define-derived-mode scss2-mode prog-mode "SCSS[ts]"
   "Edit SCSS with semantic completion, structural edits and Emmet2."
+  :syntax-table nil
   (scss2--setup 'scss))
+
+;; Code that asks `derived-mode-p' about the built-in modes treats this one alike.
+(derived-mode-add-parents 'scss2-mode '(scss-mode css-mode css-base-mode))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.scss\\'" . scss2-mode))

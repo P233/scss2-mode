@@ -23,7 +23,7 @@
      (dotimes (index 300)
        (insert (format ".card-%d {\n  background: url(http://example.test/%d.png);\n  margin: 2px/* note */3px;\n}\n"
                        index index)))
-     (let ((css-fontify-colors nil)) (funcall ,mode))
+     (let ((scss2-fontify-colors nil)) (funcall ,mode))
      (let ((noninteractive nil)) (font-lock-mode 1))
      (jit-lock-fontify-now)
      (syntax-propertize (point-max))
@@ -73,7 +73,7 @@ With SYNTAX-FIRST, a lexical syntax reader runs before the redisplay hooks."
     (with-temp-buffer
       (rename-buffer "scss2-narrowing-fresh" t)
       (insert text)
-      (let ((css-fontify-colors nil)) (funcall mode))
+      (let ((scss2-fontify-colors nil)) (funcall mode))
       (let ((noninteractive nil)) (font-lock-mode 1))
       (scss2-narrowing-test--properties))))
 
@@ -134,9 +134,10 @@ With SYNTAX-FIRST, a lexical syntax reader runs before the redisplay hooks."
             (let ((font-lock-dont-widen t))
               (font-lock-ensure)
               (search-forward "a//")
+              ;; Reading the syntax state propertizes up to point.
+              (should-not (nth 4 (syntax-ppss)))
               (should (equal (get-text-property (- (point) 2) 'syntax-table)
                              (string-to-syntax ".")))
-              (should-not (nth 4 (syntax-ppss)))
               (should (equal scss2-narrowing-test--parses '(t)))
               (goto-char (point-min)) (search-forward "color: r")
               (let ((context (scss2-context-at-point)))
@@ -371,7 +372,7 @@ Use the buffer's installed command variables, or with
   ;; Targets in the restriction are found as in the widened buffer; others stop at its edge.
   (with-temp-buffer
     (insert (scss2-narrowing-test--nested-text))
-    (let ((css-fontify-colors nil) (css-indent-offset 2) (original (buffer-string))
+    (let ((scss2-fontify-colors nil) (scss2-indent-offset 2) (original (buffer-string))
           (lines (count-lines (point-min) (point-max))) outcomes)
       (scss2-mode)
       (pcase-dolist (`(,name . ,function) scss2-narrowing-test--commands)
@@ -448,7 +449,7 @@ Use the buffer's installed command variables, or with
 
 (ert-deftest scss2-narrowing-fill-reindent-defun-in-a-cut-block ()
   ;; Alone, a restriction inside the block parses without a defun.
-  (let ((css-indent-offset 2)
+  (let ((scss2-indent-offset 2)
         (head '(":root {" "  color-scheme: light;" "  // Layer 1"))
         (tail '("   --base: #b67ea9;" "      --n-100: oklch(0.965 0.003 265);"
                 "  @include accent-tokens;" "    }")))
@@ -481,7 +482,7 @@ Use the buffer's installed command variables, or with
 
 (ert-deftest scss2-narrowing-fill-reindent-defun-decides-in-the-full-buffer ()
   ;; A restriction that starts inside a comment hides the comment's opener.
-  (let ((css-indent-offset 2))
+  (let ((scss2-indent-offset 2))
     (with-temp-buffer
       ;; Inside the restriction, the apostrophe opens a string over the rule.
       (insert "// it's a note\n.a {\n      color: red;\n  margin: 0;\n}\n")

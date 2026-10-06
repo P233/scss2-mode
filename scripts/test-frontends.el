@@ -16,7 +16,7 @@
   `(save-window-excursion
      (with-temp-buffer
        (set-window-buffer (selected-window) (current-buffer))
-       (let ((css-fontify-colors nil)) (funcall ,mode))
+       (let ((scss2-fontify-colors nil)) (funcall ,mode))
        (insert ".a { " ,input "; }") (backward-char 3)
        (buffer-enable-undo)
        (let ((completion-styles '(orderless basic))

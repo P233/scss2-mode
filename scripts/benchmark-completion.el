@@ -71,7 +71,7 @@
     (with-temp-buffer
       (dotimes (i size) (insert (format "$token%d: red; .rule%d { color: red; }\n" i i)))
       (insert ".a { " input " }") (backward-char 2)
-      (let ((position (point)) (css-fontify-colors nil)) (scss2-mode) (goto-char position))
+      (let ((position (point)) (scss2-fontify-colors nil)) (scss2-mode) (goto-char position))
       (scss2--root-node)
       (scss2-bench--trace
        (format "input-%d:%s" size input)
@@ -90,12 +90,12 @@
           (with-current-buffer module
             (setq buffer-file-name path)
             (dotimes (i size) (insert (format "$token%d: red;\n" i)))
-            (let ((css-fontify-colors nil)) (scss2-mode))
+            (let ((scss2-fontify-colors nil)) (scss2-mode))
             (scss2--root-node))
           (with-temp-buffer
             (setq buffer-file-name (expand-file-name "main.scss" directory))
             (insert "@use 'tokens'; .a { color: tokens.$to }") (backward-char 2)
-            (let ((position (point)) (css-fontify-colors nil)) (scss2-mode) (goto-char position))
+            (let ((position (point)) (scss2-fontify-colors nil)) (scss2-mode) (goto-char position))
             (scss2-bench--trace
              (format "open-module-%d" size)
              (lambda () (delete-char -1) (insert "o") (scss2-bench--request)))))

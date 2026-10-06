@@ -9,7 +9,7 @@
   `(with-temp-buffer
      (insert ,text)
      (goto-char (point-min)) (search-forward "|") (delete-char -1)
-     (let ((position (point)) (indent-tabs-mode nil) (css-indent-offset 2))
+     (let ((position (point)) (indent-tabs-mode nil) (scss2-indent-offset 2))
        (css2-mode) (goto-char position)
        ,@body)))
 
@@ -324,7 +324,7 @@
         (pcase setting
           ('enabled (setq-local scss2-enable-emmet nil))
           ('dialect (setq scss2-dialect 'scss))
-          ('indent (setq-local css-indent-offset 4))
+          ('indent (setq-local scss2-indent-offset 4))
           ('provider (setq-local emmet2-context-provider (copy-sequence emmet2-context-provider))))
         (should-not (all-completions "m10" table))
         (funcall exit candidate 'finished)

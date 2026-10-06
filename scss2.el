@@ -10,17 +10,28 @@
 
 ;; Shared setup for the scss2-mode package.  The bundled parser and query
 ;; are installed together; scss2-grammar owns native compilation and loading.
-;; Modes retain built-in indentation and comments for their dialect.
+;; Indentation and comments come from scss2-syntax and need no parser.
 
 ;;; Code:
 
-(require 'css-mode)
 (require 'treesit)
 (require 'scss2-grammar)
 (require 'scss2-context)
 (require 'scss2-edit)
 (require 'scss2-completion)
 (require 'scss2-emmet)
+
+(defvar shr-color-html-colors-alist)
+(declare-function color-hsl-to-rgb "color" (hue saturation luminance))
+(declare-function color-rgb-to-hex "color" (red green blue &optional digits-per-component))
+
+(defcustom scss2-fontify-colors t
+  "Whether to show each literal color on itself as background.
+Hex colors, CSS color names and rgb(), rgba(), hsl() and hsla() calls with
+literal components are shown.  Set this before entering `scss2-mode' or
+`css2-mode'."
+  :type 'boolean
+  :group 'scss2)
 
 (defcustom scss2-fontify-details t
   "Whether to highlight numbers, operators and punctuation.
@@ -34,11 +45,19 @@ buffers after changing it so their old fontification intervals are freed."
   :type 'boolean
   :group 'scss2)
 
+(defface scss2-selector '((t :inherit font-lock-function-name-face))
+  "Face for selectors."
+  :group 'scss2)
+
+(defface scss2-property '((t :inherit font-lock-keyword-face))
+  "Face for property names and media feature names."
+  :group 'scss2)
+
 (defconst scss2--faces
   '(("comment" . font-lock-comment-face)
-    ("tag" . css-selector)
-    ("attribute" . css-selector)
-    ("property" . css-property)
+    ("tag" . scss2-selector)
+    ("attribute" . scss2-selector)
+    ("property" . scss2-property)
     ("variable" . font-lock-variable-name-face)
     ("variable.parameter" . font-lock-variable-name-face)
     ("module" . font-lock-type-face)
@@ -97,7 +116,7 @@ parent match can otherwise be overwritten by a generic child capture."
     (unless (= (length sections) 2)
       (error "SCSS query must contain one Context overrides section"))
     ;; Contextual names can contain interpolation and comments with their own faces.
-    (dolist (mapping '((css-property . scss2--fontify-property)
+    (dolist (mapping '((scss2-property . scss2--fontify-property)
                        (font-lock-keyword-face . scss2--fontify-keyword)))
       (setcar (cdr sections)
               (replace-regexp-in-string
@@ -110,7 +129,75 @@ parent match can otherwise be overwritten by a generic child capture."
      (when (eq scss2-dialect 'css)
        (treesit-font-lock-rules
         :language (scss2--language) :feature 'scss :override t
-        '((inline_comment) @font-lock-warning-face))))))
+        '((inline_comment) @font-lock-warning-face)))
+     (when scss2-fontify-colors
+       (require 'shr-color)
+       (treesit-font-lock-rules
+        :language (scss2--language) :feature 'scss :override t
+        `(((hex_color) @scss2--fontify-color)
+          ((plain_value) @scss2--fontify-color
+           (:match ,(scss2--color-name-regexp) @scss2--fontify-color))
+          ((call_expression
+            name: (function_name) @_name (:match "\\`\\(?:rgba?\\|hsla?\\)\\'" @_name))
+           @scss2--fontify-color)))))))
+
+(defvar scss2--color-name-regexp nil
+  "Regexp matching a whole CSS color name, built on first use.")
+
+(defun scss2--color-name-regexp ()
+  "Return a regexp for CSS color names in their usual lowercase or camel case.
+Building it takes about 1 ms, so every buffer reuses one."
+  (or scss2--color-name-regexp
+      (setq scss2--color-name-regexp
+            (concat "\\`" (regexp-opt (mapcan (lambda (entry) (list (car entry) (downcase (car entry))))
+                                               shr-color-html-colors-alist))
+                    "\\'"))))
+
+(defun scss2--fontify-color (node _override start end &rest _)
+  "Show the literal color NODE within START..END on itself as background."
+  (when-let* ((color (scss2--literal-color node)))
+    (treesit-fontify-with-override
+     (max start (treesit-node-start node)) (min end (treesit-node-end node))
+     (list :background color :foreground (readable-foreground-color color)
+           :box '(:line-width -1))
+     t)))
+
+(defun scss2--literal-color (node)
+  "Return the hex RGB color that NODE spells, or nil.
+Hex alpha digits are dropped, as rgba() and hsla() alpha components are."
+  (let ((text (treesit-node-text node t)))
+    (pcase (treesit-node-type node)
+      ("hex_color" (substring text 0 (if (> (length text) 5) 7 4)))
+      ("plain_value" (cdr (assoc-string text shr-color-html-colors-alist t)))
+      (_ (scss2--color-call text)))))
+
+(defun scss2--color-call (text)
+  "Return the hex RGB color of the rgb() or hsl() family call TEXT, or nil.
+Commas, spaces and a slash before alpha may separate the components."
+  (when (string-match "\\`\\(rgb\\|hsl\\)a?(\\([^()]*\\))\\'" text)
+    (let ((model (match-string 1 text))
+          (parts (mapcar (lambda (part)
+                           (and (string-match "\\`\\([-+]?[0-9]*\\.?[0-9]+\\)\\([a-z%]*\\)\\'" part)
+                                (cons (string-to-number (match-string 1 part)) (match-string 2 part))))
+                         (split-string (match-string 2 text) "[ \t\n,/]+" t))))
+      (pcase (and (<= 3 (length parts) 4) (not (memq nil parts)) parts)
+        ((and `((,red . ,u1) (,green . ,u2) (,blue . ,u3) . ,_)
+              (guard (equal model "rgb"))
+              (guard (cl-every (lambda (unit) (member unit '("" "%"))) (list u1 u2 u3))))
+         (apply #'format "#%02x%02x%02x"
+                (cl-mapcar (lambda (number unit)
+                             (min 255 (max 0 (round (if (equal unit "%") (* number 2.55) number)))))
+                           (list red green blue) (list u1 u2 u3))))
+        ((and `((,hue . ,unit) (,saturation . ,u2) (,lightness . ,u3) . ,_)
+              (guard (equal model "hsl"))
+              (let turn (pcase unit ("" 360.0) ("deg" 360.0) ("grad" 400.0)
+                          ("rad" (* 2 float-pi)) ("turn" 1.0)))
+              (guard (and turn (member u2 '("" "%")) (member u3 '("" "%")))))
+         (apply #'color-rgb-to-hex
+                (append (color-hsl-to-rgb (mod (/ hue turn) 1.0)
+                                          (min 1.0 (max 0.0 (/ saturation 100.0)))
+                                          (min 1.0 (max 0.0 (/ lightness 100.0))))
+                        '(2))))))))
 
 (defun scss2--fontify-context (node face override start end)
   "Apply FACE with OVERRIDE to NODE in START..END, keeping nested faces.
@@ -131,7 +218,7 @@ Interpolation and comments inside NODE are left untouched."
 
 (defun scss2--fontify-property (node override start end &rest _)
   "Apply the contextual property face to NODE within START..END with OVERRIDE."
-  (scss2--fontify-context node 'css-property override start end))
+  (scss2--fontify-context node 'scss2-property override start end))
 
 (defun scss2--fontify-keyword (node override start end &rest _)
   "Apply the contextual keyword face to NODE within START..END with OVERRIDE."
@@ -158,7 +245,6 @@ decline; Emmet's table yields to later functions when it has no choices."
   "Keep the stylesheet dispatcher as the local completion entry point.
 Emmet's minor-mode hook can run after the major mode.  Keep its explicit
 commands while removing its overlapping automatic completion provider."
-  (remove-hook 'completion-at-point-functions #'css-completion-at-point t)
   (remove-hook 'completion-at-point-functions 'emmet2-capf t)
   (add-hook 'completion-at-point-functions #'scss2-completion-at-point -90 t))
 
@@ -244,6 +330,50 @@ before the restriction or whose indentation crosses its end."
             (setq end (point)))))
       (when (< start end)
         (indent-region start end)))))
+
+;; Adapted from `css-fill-paragraph' in Emacs's css-mode.el, without its block reformatting.
+(defun scss2--fill-paragraph (&optional justify)
+  "Fill the block comment paragraph at point with JUSTIFY.
+In code, change nothing and return t, so code is never filled as prose.
+Return nil in strings and line comments, leaving them to `fill-paragraph'."
+  (save-excursion
+    ;; Fill a comment that starts later on this line.
+    (when (save-excursion
+            (beginning-of-line)
+            (comment-search-forward (line-end-position) t))
+      (goto-char (match-end 0)))
+    (let ((state (syntax-ppss))
+          (end (line-end-position)))
+      (cond
+       ((not (nth 8 state)) t)
+       ((and (nth 4 state)
+             (save-excursion
+               (goto-char (nth 8 state))
+               (forward-comment 1)
+               (prog1 (not (bolp)) (setq end (point)))))
+        (save-restriction
+          (narrow-to-region (nth 8 state) end)
+          (comment-normalize-vars)
+          (let* ((fill-paragraph-function nil)
+                 (continue (and comment-continue (string-match "[^ \t]" comment-continue)
+                                (regexp-quote comment-continue)))
+                 (paragraph-separate
+                  (if continue
+                      (concat "\\(?:[ \t]*\\(?:" continue "\\|" comment-start-skip
+                              "\\|" comment-end-skip "\\)\\)?\\(?:" paragraph-separate "\\)")
+                    paragraph-separate))
+                 (paragraph-start
+                  (if continue
+                      (concat "\\(?:[ \t]*" continue "\\)?\\(?:" paragraph-start "\\)")
+                    paragraph-start)))
+            (fill-paragraph justify)
+            t)))))))
+
+(defun scss2--adaptive-fill ()
+  "Continue a line that opens a block comment with ` *'."
+  (when (looking-at "[ \t]*/\\*[ \t]*")
+    (let ((prefix (match-string 0)))
+      (and (string-match "/\\*" prefix) (replace-match " *" t t prefix)))))
 
 ;; INTERIM (since 2026-10-03, until treesit-fill-reindent-defun decides fill or reindent
 ;; outside the restriction, no upstream report yet): see "Tree-sitter commands" in
@@ -369,7 +499,12 @@ shares, including buffers above `treesit-max-buffer-size'."
   "Set up shared editing for DIALECT with exactly one SCSS-grammar parser.
 As in built-in tree-sitter modes, a buffer larger than
 `treesit-max-buffer-size' or a grammar that cannot be built or loaded only
-warns and keeps its base mode."
+warns; it keeps the dialect's syntax, comments, indentation and
+syntactic highlighting of comments and strings."
+  (scss2-syntax-lexical-setup dialect)
+  (setq-local fill-paragraph-function #'scss2--fill-paragraph)
+  (setq-local adaptive-fill-function #'scss2--adaptive-fill)
+  (setq-local font-lock-defaults '(nil))
   (cond
    ;; Same check and warning as `treesit-ready-p', which would load the grammar again.
    ((> (position-bytes (max (point-min) (1- (point-max))))
