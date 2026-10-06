@@ -399,7 +399,13 @@ Lines are judged in Font Lock's view; the result stays accessible."
     (scss2--transaction
       (dolist (range ranges) (delete-region (car range) (cdr range)))
       (goto-char begin)
-      (when lines (back-to-indentation))
+      (when lines
+        ;; Lines killed between blank lines leave one blank line behind.
+        (when (and (looking-at-p "[ \t]*\r?\n")
+                   (save-excursion
+                     (and (zerop (forward-line -1)) (looking-at-p "[ \t]*\r?\n"))))
+          (delete-region (point) (line-beginning-position 2)))
+        (back-to-indentation))
       (unless (string-empty-p text) (kill-new text)))))
 
 ;;;###autoload

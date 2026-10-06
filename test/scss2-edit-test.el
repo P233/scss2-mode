@@ -557,6 +557,18 @@
     (scss2-kill t)
     (should (equal (buffer-string) ""))))
 
+(ert-deftest scss2-edit-kill-between-blank-lines-keeps-one ()
+  (scss2-edit-test--buffer 'scss2-mode ".a {\n  color: red;\n\n  mar│gin: 0;\n\n  padding: 0;\n}"
+    (scss2-kill)
+    (should (equal (scss2-edit-test--with-point) ".a {\n  color: red;\n\n  │padding: 0;\n}"))
+    (should (equal (car kill-ring) "  margin: 0;\n")))
+  (dolist (ending '("\n" "\r\n"))
+    (scss2-edit-test--buffer 'scss2-mode
+        (string-join '(".a {}" "" ".b { x: 1│; }" "" ".c {}") ending)
+      (scss2-kill t)
+      (should (equal (buffer-string) (string-join '(".a {}" "" ".c {}") ending)))
+      (should (looking-at-p "\\.c")))))
+
 (ert-deftest scss2-edit-empty-header-content-despite-body-errors ()
   (dolist (case '(("[data-x=\"f│oo\"] { color: red; width }" "[data-x=\"│\"] { color: red; width }")
                   ("@if $a == \"f│oo\" { width }" "@if $a == \"│\" { width }")
