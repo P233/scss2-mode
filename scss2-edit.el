@@ -31,17 +31,18 @@ SEPARATOR describes how to duplicate the selected entity."
   (scss2--make-target :owner node :beg (treesit-node-start node)
                       :end (treesit-node-end node) :separator separator))
 
-(defun scss2--check-target (target)
+(defun scss2--check-target (target &optional navigation)
   "Return TARGET, or reject it when no reliable edit range exists.
 A missing target, one outside the accessible buffer and one whose
-boundaries depend on parser recovery are all rejected."
+boundaries depend on parser recovery are all rejected.  For NAVIGATION,
+which changes no text, an accessible target suffices."
   (unless target (user-error "No stylesheet target here"))
   (unless (<= (point-min) (scss2--target-beg target)
               (scss2--target-end target) (point-max))
     (user-error "This target extends outside the accessible buffer"))
-  (let ((node (scss2--target-owner target)))
-    (when (or (treesit-node-check node 'has-error)
-              (treesit-node-check node 'missing))
+  (let ((node (and (not navigation) (scss2--target-owner target))))
+    (when (and node (or (treesit-node-check node 'has-error)
+                        (treesit-node-check node 'missing)))
       (user-error "This syntax is incomplete; no reliable edit range"))
     (while node
       (when (equal (treesit-node-type node) "ERROR")
@@ -580,7 +581,8 @@ Requires the optional Avy package."
             (let ((node (scss2--block-node (scss2--containing-node))))
               (while (and node (member (treesit-node-type node) scss2--declaration-types))
                 (setq node (scss2--block-node (treesit-node-parent node))))
-              (when node (scss2--node-target node))))))
+              (when node (scss2--node-target node))))
+          t))
         (avy-all-windows nil) (avy-all-windows-alt nil)
         (current-prefix-arg nil))
     (avy-goto-word-0 nil (scss2--target-beg target) (scss2--target-end target))))

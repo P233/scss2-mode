@@ -891,7 +891,9 @@
                    ".outer { font: { size: 12px; } .inner {} }")
                   (".outer { --raw: { nested: │word }; }"
                    ".outer { --raw: { nested: word }; }")
-                  ("@if $x {} @else { x: │2; }" "@if $x {} @else { x: 2; }")))
+                  ("@if $x {} @else { x: │2; }" "@if $x {} @else { x: 2; }")
+                  ;; Navigation tolerates an unfinished declaration in the block.
+                  (".outer { .a { color: red; wi│ } .b {} }" ".a { color: red; wi }")))
     (scss2-edit-test--buffer 'scss2-mode (car case)
       (let ((require-function (symbol-function 'require)) (avy-all-windows 'all-frames)
             (avy-all-windows-alt t) (current-prefix-arg '(4)) (called nil))
