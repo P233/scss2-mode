@@ -301,12 +301,15 @@ tests retain navigation, faces, hooks, dialect lifecycle, Emmet and cross-featur
 contracts. The optional Corfu/YAS suite exercises typing, choosing, host TAB and undo;
 it stubs drawing and is not GUI acceptance.
 
-The 2026-10-06 import of parser `7d5fef4` replaces snapshot `514a38f`. The
-parser restores statement breaks for statements being typed and drops Internet
-Explorer–only syntax, so the property-name helper no longer strips a `*` hack
-prefix. Emacs 31.1 validation passed 72 core, 3 semantic, 4 Python, 287 source
-ERT, 287 installed ERT, 23 Corfu/YAS and 3 Avy tests, plus strict byte
-compilation and the release-manifest check; Company/Orderless was not run.
+The later 2026-10-06 import of parser `8bd60cf` replaces snapshot `7d5fef4`.
+Its highlight query no longer skips comments around a query feature name, which
+cuts the query's compile time from about 52 to 31 ms per dialect, and a
+semicolon-ended declaration is one tree node instead of two, which makes
+retained trees about 5% smaller. The wide-query performance test therefore puts
+its 4,096 comments between `1px` and `<`, where the property role survives.
+Emacs 31.1 validation passed 72 core, 3 semantic, 4 Python, 292 source ERT, 292
+installed ERT, 23 Corfu/YAS and 3 Avy tests, plus strict byte compilation and
+the release-manifest check; Company/Orderless was not run.
 
 ## Performance model
 
@@ -339,30 +342,27 @@ cache is not the default remedy.
 
 ### Parser snapshot measurements
 
-The `514a38f` → `7d5fef4` snapshot comparison used `scripts/benchmark-emacs.el`
-on an Apple M1 Pro with Emacs 31.1, the same Emmet checkout and the same
-byte-compiled runtime Lisp. Both snapshots read the newer fixture, which no
-longer contains Internet Explorer–only syntax. Three alternating process runs
-per snapshot each used two warmups and three measured repetitions; inputs and
-final face-span hashes matched across all runs. Medians of process medians, in
+The `7d5fef4` → `8bd60cf` snapshot comparison used `scripts/benchmark-emacs.el`
+on an Apple M1 Pro with Emacs 31.1, Emmet2 `8ef37a6`, the same byte-compiled
+runtime Lisp and the same fixture. Three alternating process runs per snapshot
+each used two warmups and three measured repetitions; inputs and final
+face-span hashes were stable across runs. Medians of process medians, in
 milliseconds:
 
 | SCSS workload | Parse before → after | Full fontification before → after |
 | --- | ---: | ---: |
-| 72,408-byte stress fixture | 3.847 → 3.969 | 16.709 → 16.752 |
-| 724,089-byte repeated fixture | 38.468 → 40.356 | 234.452 → 233.989 |
-| 131,087-byte numeric fixture | 19.530 → 20.115 | 37.976 → 38.233 |
-| 512 nested query levels | 0.398 → 0.418 | 8.976 → 8.941 |
-| 4,096 query comments | 2.474 → 2.380 | 6.881 → 6.805 |
+| 72,408-byte stress fixture | 3.910 → 3.907 | 16.042 → 16.072 |
+| 724,089-byte repeated fixture | 38.645 → 37.909 | 229.213 → 231.107 |
+| 131,087-byte numeric fixture | 19.519 → 18.861 | 36.824 → 35.998 |
+| 512 nested query levels | 0.398 → 0.401 | 8.829 → 8.754 |
+| 4,096 query comments | 2.367 → 2.371 | 6.521 → 4.874 |
 
-Parsing takes 3–5% longer and fontification is effectively unchanged. Typing
-25 statements key by key, with editor-style pairing, on a blank line above a
-declaration in a 1,000-rule buffer changes the faces within 50 lines below the
-caret on 64 of 543 keys instead of 310, marks 52 KB for refontification instead
-of 2,518 KB, and lowers the p95 parse-and-invalidate step from 3.3 to 1.5 ms.
-Without pairing, keys changing the faces below fall from 451 to 110 of 570.
-These are batch timings with GC between repetitions and color previews disabled;
-they exclude redisplay.
+Warm parsing and fontification are effectively unchanged, except that the
+4,096 comments between a feature name and its comparison now fontify 25% faster
+because the query stops matching across them. Warmups hide the cold compile
+saving; in a fresh session the first SCSS buffer's mode setup and parse fell
+from about 75 to 61 ms. These are batch timings with GC between repetitions and
+color previews disabled; they exclude redisplay.
 
 ## Narrowing and the shared parser
 

@@ -179,8 +179,8 @@
     (with-temp-buffer
       ;; Batch mode and hidden buffers otherwise disable real JIT hooks.
       (rename-buffer "scss2-wide-query-test" t)
-      (insert "@media (width " (apply #'concat (make-list 4096 "/**/ "))
-              "> 1px) { .a { color: red; } }")
+      (insert "@media (1px " (apply #'concat (make-list 4096 "/**/ "))
+              "< width) { .a { color: red; } }")
       (let ((scss2-fontify-colors nil))
         (funcall mode)
         (let ((noninteractive nil)) (font-lock-mode 1))
@@ -188,6 +188,12 @@
         (font-lock-ensure)
         (should-not (treesit-node-check (scss2--root-node) 'has-error))
         (goto-char (point-min))
+        (search-forward "1px")
+        (should (eq (get-text-property (match-beginning 0) 'face)
+                    'font-lock-number-face))
+        (search-forward "/**/")
+        (should (eq (get-text-property (match-beginning 0) 'face)
+                    'font-lock-comment-face))
         (search-forward "width")
         (let ((start (match-beginning 0)))
           (should (eq (get-text-property start 'face) 'scss2-property))
@@ -195,12 +201,6 @@
           (run-hook-with-args 'pre-redisplay-functions nil)
           (font-lock-ensure start (point))
           (should-not (treesit-node-check (scss2--root-node) 'has-error))
-          (should (eq (get-text-property start 'face) 'scss2-property)))
-        (search-forward "/**/")
-        (should (eq (get-text-property (match-beginning 0) 'face)
-                    'font-lock-comment-face))
-        (search-forward "1px")
-        (should (eq (get-text-property (match-beginning 0) 'face)
-                    'font-lock-number-face))))))
+          (should (eq (get-text-property start 'face) 'scss2-property)))))))
 
 ;;; scss2-performance-test.el ends here
