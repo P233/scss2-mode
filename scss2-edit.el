@@ -246,10 +246,11 @@ For map NODE, use its entry that ends at point, before a comma or `)'."
                     (and (eq (char-before (car interior)) ?\()
                          (< (point) (1- (car interior))))))
              (setq node (treesit-node-parent node)))
-            ((setq bounds (scss2--map-entry-value node))
-             (setq owner (or statement node)))
-            ((scss2--interior node)
-             (setq bounds (scss2--interior node) owner (or statement node)))
+            ((setq bounds (or (scss2--map-entry-value node) (scss2--interior node)))
+             ;; Errors in a block's body leave its header's content reliable.
+             (setq owner (if (and statement (not (scss2--block-bounds statement)))
+                             statement
+                           node)))
             (t (setq node (treesit-node-parent node))))))
        (if bounds
            (scss2--make-target :owner owner :beg (car bounds) :end (cdr bounds))

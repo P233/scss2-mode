@@ -557,6 +557,17 @@
     (scss2-kill t)
     (should (equal (buffer-string) ""))))
 
+(ert-deftest scss2-edit-empty-header-content-despite-body-errors ()
+  (dolist (case '(("[data-x=\"f│oo\"] { color: red; width }" "[data-x=\"│\"] { color: red; width }")
+                  ("@if $a == \"f│oo\" { width }" "@if $a == \"│\" { width }")
+                  (".a-#{$b│} { width }" ".a-#{│} { width }")))
+    (scss2-edit-test--buffer 'scss2-mode (car case)
+      (scss2-empty)
+      (should (equal (scss2-edit-test--with-point) (cadr case)))))
+  ;; A recovered header itself remains unreliable.
+  (scss2-edit-test--buffer 'scss2-mode "[data-x=\"f│oo\" { color: red; }"
+    (scss2-edit-test--unchanged #'scss2-empty)))
+
 (ert-deftest scss2-edit-prefixed-mark-after-mark-selects-the-block ()
   (scss2-edit-test--buffer 'scss2-mode ".a {\n  co│lor: red;\n}"
     (let ((transient-mark-mode t))
