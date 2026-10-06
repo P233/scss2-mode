@@ -152,8 +152,8 @@ css-mode; those modes' hooks and keymaps do not apply. css-mode pulls in eww,
 shr, sgml-mode and SMIE. In a fresh `emacs -Q` session, requiring the
 byte-compiled package with Emmet took 130–135 ms and added 4.7 MB of live Lisp
 heap and 89 features while it did; without it, 25–28 ms, 1.7 MB and 39 features.
-Emmet2 still loads css-mode for styles embedded in another host and to color a
-multi-line CSS completion preview, so the first such preview pays that load.
+Emmet2 `d58969a` and later never load css-mode, including for styles embedded
+in another host and for multi-line CSS completion previews.
 
 Indentation reads bracket depth from `syntax-ppss`, so it works without a parser,
 as in a clone or after a grammar failure. Inside a bracket, a statement follows
