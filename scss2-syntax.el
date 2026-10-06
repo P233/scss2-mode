@@ -504,33 +504,6 @@ trailing blanks after an unclosed block still belong to it."
                (string-blank-p
                 (buffer-substring-no-properties (treesit-node-end node) (point))))))))
 
-(defun scss2--value-bounds (node)
-  "Return the trimmed right-hand side of NODE's colon as (BEG . END).
-NODE is a declaration, feature query, parameter, named argument or map
-entry.  Exclude the direct colon, semicolon and nested-property block.
-For a value statement such as @return, return what follows the directive.
-Include flags such as !important.  An empty value has equal beginning and
-end."
-  (let ((begin (and (equal (treesit-node-type node) "value_statement")
-                    (treesit-node-end (treesit-node-child node 0))))
-        end)
-    (dolist (child (scss2--children node))
-      (let ((type (treesit-node-type child)))
-        (cond
-         ((and (not begin) (equal type ":"))
-          (setq begin (treesit-node-end child)))
-         ((and begin (not end) (member type '(";" "{")))
-          (setq end (treesit-node-start child))))))
-    (when begin
-      (setq end (or end (treesit-node-end node)))
-      (save-excursion
-        (goto-char begin)
-        (skip-chars-forward " \t\r\n" end)
-        (setq begin (point))
-        (goto-char end)
-        (skip-chars-backward " \t\r\n" begin)
-        (cons begin (point))))))
-
 (defun scss2--statement-start ()
   "Find the current statement boundary without crossing literal text.
 Scan punctuation at block level, ignoring strings, comments and parentheses.

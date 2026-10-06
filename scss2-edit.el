@@ -154,7 +154,7 @@ Only explicit block selection may cross a leaf statement boundary."
                    (scss2--node-target declaration 'statement)))
       (_
        (setq node (or (scss2--touched-node)
-                      (user-error "Point is not on a stylesheet target")))
+                      (user-error "No stylesheet target here")))
        (when (scss2--ancestor node scss2--comment-types)
          (user-error "Comments can be uncommented with scss2-comment-uncomment"))
        (if-let* ((selectors (scss2--selector-owner node)))
@@ -196,6 +196,32 @@ Only explicit block selection may cross a leaf statement boundary."
       (when-let* ((arguments (scss2--child node "arguments")))
         (scss2--interior arguments)))))
 
+(defun scss2--value-bounds (node)
+  "Return the trimmed right-hand side of NODE's colon as (BEG . END).
+NODE is a declaration or map entry; for a value statement such as @return,
+return what follows the directive.  Exclude the direct colon, semicolon and
+nested-property block.  Include flags such as !important.  An empty value
+has equal beginning and end."
+  (let ((begin (and (equal (treesit-node-type node) "value_statement")
+                    (treesit-node-end (treesit-node-child node 0))))
+        end)
+    (dolist (child (scss2--children node))
+      (let ((type (treesit-node-type child)))
+        (cond
+         ((and (not begin) (equal type ":"))
+          (setq begin (treesit-node-end child)))
+         ((and begin (not end) (member type '(";" "{")))
+          (setq end (treesit-node-start child))))))
+    (when begin
+      (setq end (or end (treesit-node-end node)))
+      (save-excursion
+        (goto-char begin)
+        (skip-chars-forward " \t\r\n" end)
+        (setq begin (point))
+        (goto-char end)
+        (skip-chars-backward " \t\r\n" begin)
+        (cons begin (point))))))
+
 (defun scss2--condition-bounds (node)
   "Return NODE's complete condition field, including all value siblings."
   (let ((conditions
@@ -228,18 +254,17 @@ For map NODE, use its entry that ends at point, before a comma or `)'."
          (while (and node (not bounds))
            (cond
             ((scss2--statement-p node)
-             (setq owner node
-                   bounds
-                   (or (when-let* ((body (scss2--block-bounds node))
-                                   ;; The opening brace belongs to the body.
-                                   (_ (< (point) (1- (car body)))))
-                         (or (scss2--condition-bounds node)
-                             (and (member (treesit-node-type node) scss2--declaration-types)
-                                  (scss2--value-bounds node))))
-                       (scss2--block-bounds node)
-                       (and (member (treesit-node-type node)
-                                    (cons "value_statement" scss2--declaration-types))
-                            (scss2--value-bounds node))))
+             (let ((body (scss2--block-bounds node)))
+               (setq owner node
+                     bounds
+                     ;; The opening brace belongs to the body.
+                     (if (and body (>= (point) (1- (car body))))
+                         body
+                       (or (scss2--condition-bounds node)
+                           (and (member (treesit-node-type node)
+                                        (cons "value_statement" scss2--declaration-types))
+                                (scss2--value-bounds node))
+                           body))))
              ;; Unsupported leaf statements never empty their parent block.
              (setq node nil))
             ((scss2--comment-p node) (setq node nil))
@@ -273,7 +298,6 @@ declaration, one without a direct colon or value, and a value without `;'."
         (when-let* ((value (treesit-node-child-by-field-name owner "value")))
           (treesit-node-start value))
       (when-let* ((semicolon (scss2--child owner ";"))
-                  (_ (not (treesit-node-check semicolon 'missing)))
                   (_ (<= (point) (treesit-node-start semicolon))))
         (treesit-node-end semicolon)))))
 
@@ -311,7 +335,7 @@ The existing buffer-local dialect enables it only in stylesheet buffers.")
 (defun scss2-tab ()
   "Move from a declaration's name to its value, or from its value past `;'.
 Dismiss an open completion menu without accepting a candidate.  Elsewhere
-delegate to the existing TAB binding, including completion and snippet fields."
+move to the next snippet field, or indent with `indent-for-tab-command'."
   (interactive)
   (if (scss2--declaration-tab-target)
       (progn
@@ -338,8 +362,7 @@ delegate to the existing TAB binding, including completion and snippet fields."
                                  (- (length kill-ring) (length kill-ring-yank-pointer)))))
      (condition-case error-data
          (atomic-change-group
-           (save-current-buffer
-             (let ((last-command nil)) ,@body)))
+           (save-current-buffer ,@body))
        ((error quit)
         (goto-char saved-point)
         (set-marker (mark-marker) saved-mark)
@@ -423,7 +446,8 @@ With prefix BLOCK, kill the nearest complete structural block instead."
   "Kill the nearest delimited interior, declaration value or if condition.
 Brackets, interpolation and string quotes delimit interiors.  A map entry
 empties its value as a declaration does, and @return, @debug, @warn and
-@error empty the value that follows them.
+@error empty the value that follows them.  On a rule or at-rule header
+outside its condition, or in a block's blank space, kill the block's body.
 With prefix BLOCK, clear the nearest structural block's body."
   (interactive "P")
   (let ((target (scss2--content-target block)))
