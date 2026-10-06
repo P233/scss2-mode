@@ -223,24 +223,29 @@ Only explicit block selection may cross a leaf statement boundary."
        (when bounds
          (scss2--make-target :owner owner :beg (car bounds) :end (cdr bounds)))))))
 
-(defun scss2--value-tab-target ()
-  "Return the end of the declaration's semicolon when point is in its value.
-Use the declaration's direct terminator, including inside strings, URLs,
-comments and nested calls.  Incomplete or inaccessible declarations return nil."
+(defun scss2--declaration-tab-target ()
+  "Return where TAB moves within the declaration at point, or nil.
+From the name, move to the start of the value, past any comment; from the
+value, move past the declaration's direct semicolon, including inside
+strings, URLs, comments and nested calls.  Return nil for an inaccessible
+declaration, one without a direct colon or value, and a value without `;'."
   (when-let* ((target (condition-case nil (scss2--resolve-target 'property)
                        (user-error nil)))
               (owner (scss2--target-owner target))
-              (colon (scss2--child owner ":"))
-              (semicolon (scss2--child owner ";"))
-              (_ (not (treesit-node-check semicolon 'missing)))
-              (_ (<= (treesit-node-end colon) (point) (treesit-node-start semicolon))))
-    (treesit-node-end semicolon)))
+              (colon (scss2--child owner ":")))
+    (if (<= (point) (treesit-node-start colon))
+        (when-let* ((value (treesit-node-child-by-field-name owner "value")))
+          (treesit-node-start value))
+      (when-let* ((semicolon (scss2--child owner ";"))
+                  (_ (not (treesit-node-check semicolon 'missing)))
+                  (_ (<= (point) (treesit-node-start semicolon))))
+        (treesit-node-end semicolon)))))
 
 (defun scss2--tab-binding (command)
-  "Use COMMAND only when point has a declaration terminator to navigate to.
+  "Use COMMAND only when point has a declaration position to navigate to.
 Resolve this during key lookup so frontend pre-command hooks see their own
 command when navigation does not apply."
-  (and (scss2--value-tab-target) command))
+  (and (scss2--declaration-tab-target) command))
 
 (defun scss2--tab-remapping (command)
   "Remap COMMAND only while reading a plain TAB key.
@@ -255,31 +260,31 @@ commands need remapping for TAB, but keep any other keys the user binds."
   `((scss2-dialect . ,(let ((map (make-sparse-keymap)))
                       (dolist (key '("TAB" "<tab>"))
                         (define-key map (kbd key)
-                                    '(menu-item "Leave value" scss2-tab
+                                    '(menu-item "Move through declaration" scss2-tab
                                                 :filter scss2--tab-binding)))
                       (dolist (command '(yas-next-field yas-next-field-or-maybe-expand
                                          company-complete-common-or-cycle))
                         (define-key map (vector 'remap command)
-                                    '(menu-item "Leave value" scss2-tab
+                                    '(menu-item "Move through declaration" scss2-tab
                                                 :filter scss2--tab-remapping)))
                       map)))
-  "Value navigation takes precedence over completion and snippet TAB maps.
+  "Declaration navigation takes precedence over completion and snippet TAB maps.
 The existing buffer-local dialect enables it only in stylesheet buffers.")
 
 ;;;###autoload
 (defun scss2-tab ()
-  "Jump directly past the current declaration's semicolon from its value.
+  "Move from a declaration's name to its value, or from its value past `;'.
 Dismiss an open completion menu without accepting a candidate.  Elsewhere
 delegate to the existing TAB binding, including completion and snippet fields."
   (interactive)
-  (if (scss2--value-tab-target)
+  (if (scss2--declaration-tab-target)
       (progn
         (when completion-in-region-mode (completion-in-region-mode -1))
         (when (and (bound-and-true-p company-candidates) (fboundp 'company-abort))
           (company-abort))
         ;; A frontend can remove preview text while closing its menu.
-        (when-let* ((end (scss2--value-tab-target)))
-          (goto-char end)
+        (when-let* ((destination (scss2--declaration-tab-target)))
+          (goto-char destination)
           (deactivate-mark)))
     (if (and (fboundp 'yas-active-snippets) (yas-active-snippets))
         (yas-next-field)

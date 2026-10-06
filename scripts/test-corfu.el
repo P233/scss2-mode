@@ -406,6 +406,18 @@
       (should-not mark-active)
       (should (equal (buffer-string) ".a { display: ib; }")))))
 
+(ert-deftest scss2-corfu-name-tab-moves-to-the-value ()
+  (dolist (scss2-corfu--mode '(css2-mode scss2-mode))
+    (scss2-corfu--with "disp: block;"
+      (search-backward ":")
+      (corfu-auto--complete-deferred)
+      (should (eq (key-binding (kbd "TAB")) #'scss2-tab))
+      (call-interactively (key-binding (kbd "TAB")))
+      (should-not completion-in-region-mode)
+      (should (looking-at-p "block;"))
+      (should-not mark-active)
+      (should (equal (buffer-string) ".a { disp: block; }")))))
+
 (ert-deftest scss2-corfu-declaration-tab-still-accepts-a-choice ()
   (dolist (scss2-corfu--mode '(css2-mode scss2-mode))
     (scss2-corfu--with "m10"

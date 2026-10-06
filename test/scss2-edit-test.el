@@ -75,11 +75,53 @@
 
 (ert-deftest scss2-edit-tab-falls-back-without-a-reliable-value-terminator ()
   (dolist (mode '(css2-mode scss2-mode))
-    (dolist (source '(".a│ {}" ".a { dis│play: block; }"
+    (dolist (source '(".a│ {}"
                       ".a { display: block│ }"
                       ".a { /* color: r│ed; */ }"
                       ".a { width: calc(│) }"
                       "@supports (display: bl│ock) {}"))
+      (scss2-edit-test--buffer mode source
+        (let* ((position (point)) (calls 0)
+               (indent-line-function (lambda () (setq calls (1+ calls)))))
+          (scss2-tab)
+          (should (= calls 1))
+          (should (= (point) position)))))))
+
+(ert-deftest scss2-edit-tab-moves-from-a-name-to-its-value ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (case '((".a { │display: block; }" . "block; }")
+                    (".a { dis│play: block; }" . "block; }")
+                    (".a { display│: block; }" . "block; }")
+                    (".a { display │ : block; }" . "block; }")
+                    (".a { display:\n    │ block; }" . nil)
+                    (".a { --x│: 1px 2px; }" . "1px 2px; }")
+                    (".a { co│lor: /* c */ red !important; }" . "red !important")
+                    (".a { co│lor: red }" . "red }")
+                    (".a { fo│nt: bold { family: serif; } }" . "bold {")))
+      (scss2-edit-test--buffer mode (car case)
+        (let ((text (buffer-string)) (position (point)) (ring (copy-sequence kill-ring)))
+          (let ((indent-line-function (lambda () (ert-fail "Unexpected indentation"))))
+            (scss2-tab))
+          (if (cdr case)
+              (should (looking-at-p (cdr case)))
+            ;; Point already in the value moves past the semicolon instead.
+            (should (/= (point) position)))
+          (should-not mark-active)
+          (should (equal (buffer-string) text))
+          (should (equal kill-ring ring))))))
+  (scss2-edit-test--buffer 'scss2-mode "$gu│tter: 1rem; .a { #{$p}-x: 1px; }"
+    (scss2-tab)
+    (should (looking-at-p "1rem;"))
+    (scss2-tab)
+    (should (looking-at-p " \\.a"))
+    (search-forward "#{$p}")
+    (scss2-tab)
+    (should (looking-at-p "1px; }"))))
+
+(ert-deftest scss2-edit-tab-from-a-name-falls-back-without-a-value ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (source '(".a { col│or:; }" ".a { col│or: ; }" ".a { fo│nt: { family: serif; } }"
+                      ".a { dis│play }"))
       (scss2-edit-test--buffer mode source
         (let* ((position (point)) (calls 0)
                (indent-line-function (lambda () (setq calls (1+ calls)))))

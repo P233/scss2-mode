@@ -463,10 +463,14 @@ COMMANDS default to the bindings of C-M-a and C-M-e."
             (execute-kbd-macro (kbd key))
             (should (looking-at " color: red; }"))
             (should (= calls 0))
-            ;; After the terminator and in a property name, delegate TAB.
+            ;; After the terminator, delegate TAB; from a property name, move to its value.
             (execute-kbd-macro (kbd key))
             (should (= calls 1))
             (goto-char (point-min)) (search-forward "width")
+            (execute-kbd-macro (kbd key))
+            (should (looking-at "calc(2px)"))
+            (should (= calls 1))
+            (goto-char (point-min))
             (execute-kbd-macro (kbd key))
             (should (= calls 2))
             (fundamental-mode)

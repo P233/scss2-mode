@@ -237,9 +237,11 @@ uses Emmet2's shared matcher with the host's escape/Sass identity function,
 leaving original insertion spellings intact. Function acceptance with status
 `finished` only places point inside empty parentheses; no value completion
 creates snippet fields. TAB uses the current parsed declaration to jump
-directly past its semicolon, including from nested calls and snippet fields.
-Other snippet navigation keys retain their own behavior; outside accessible,
-complete values, TAB retains its existing binding. Common annotation text is
+from its name to its value's first node, and from its value directly past
+its semicolon, including from nested calls and snippet fields. Other snippet
+navigation keys retain their own behavior; outside accessible declarations
+with a value, and in values without a semicolon, TAB retains its existing
+binding. Common annotation text is
 derived once per table; display callbacks read that same immutable table context.
 Frontends own timing and drawing. Emmet owns
 its own table, render options, preview, stale-candidate validation and atomic
