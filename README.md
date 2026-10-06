@@ -10,7 +10,7 @@ Parsing and highlighting target complete CSS/SCSS files. A statement being typed
 
 - **Emacs 31.1+**, built with Tree-sitter support.
 - **A C compiler** available to Emacs (`cc`, or the `CC` environment variable).
-- **emmet2-mode 2.0.0**, installed as a dependency. It is unreleased: use a checkout of its `native-emmet-rewrite` branch at or after the commit pinned in [`.github/workflows/check.yml`](.github/workflows/check.yml). Older emmet2-mode packages are incompatible.
+- **emmet2-mode 2.0.0**, installed as a dependency. It is unreleased: use its `main` branch at or after the commit pinned in [`.github/workflows/check.yml`](.github/workflows/check.yml). Older emmet2-mode packages are incompatible.
 - **Python 3 and Git** to build the local package archive.
 
 CI runs on Linux and macOS. Indented Sass (`.sass`) is not supported.
