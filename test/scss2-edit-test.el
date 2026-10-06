@@ -557,6 +557,25 @@
     (scss2-kill t)
     (should (equal (buffer-string) ""))))
 
+(ert-deftest scss2-edit-blank-line-inside-a-value-touches-nothing ()
+  (dolist (source '("$map: (\n  a: 1,\n│\n  b: 2,\n);"
+                    "@each $k, $v in (\n  a: 1,\n│\n  b: 2,\n) { x: $v; }"))
+    (dolist (command '(scss2-kill scss2-copy scss2-duplicate))
+      (scss2-edit-test--buffer 'scss2-mode source
+        (scss2-edit-test--unchanged command)))))
+
+(ert-deftest scss2-edit-whitespace-inside-an-entity-touches-it ()
+  (scss2-edit-test--buffer 'scss2-mode ".a {\n  margin:\n│    0 auto;\n  color: red;\n}"
+    (scss2-kill)
+    (should (equal (scss2-edit-test--with-point) ".a {\n  │color: red;\n}")))
+  (scss2-edit-test--buffer 'scss2-mode ".a { content: \"a  │  b\"; }"
+    (scss2-copy)
+    (should (equal (car kill-ring) "content: \"a    b\";")))
+  (scss2-edit-test--buffer 'scss2-mode ".a {\n  /* one\n│     two */\n  color: red;\n}"
+    (scss2-comment-uncomment)
+    (should-not (string-search "/*" (buffer-string)))
+    (should (string-search "two" (buffer-string)))))
+
 (ert-deftest scss2-edit-block-prefix-shares-one-entity ()
   (dolist (mode '(css2-mode scss2-mode))
     (scss2-edit-test--buffer mode ".outer { .a { color: re│d; } } .after {}"

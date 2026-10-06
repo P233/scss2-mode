@@ -102,7 +102,7 @@ Nested pseudo-class selector lists belong to the enclosing branch."
        :count (length groups) :separator 'comma))))
 
 (defun scss2--covering-node (position)
-  "Return the smallest token covering POSITION, or nil in blank space."
+  "Return the smallest token covering POSITION, or nil on whitespace."
   (unless (memq (char-after position) '(nil ?\s ?\t ?\n ?\r ?\f))
     (let ((node (treesit-node-at position (scss2--language))))
       (while (and node (not (and (<= (treesit-node-start node) position)
@@ -111,9 +111,19 @@ Nested pseudo-class selector lists belong to the enclosing branch."
       node)))
 
 (defun scss2--touched-node ()
-  "Return the token at point or immediately before it."
+  "Return the token at point or immediately before it.
+In whitespace inside a statement, string or comment, return that node;
+whitespace between statements touches nothing."
   (or (scss2--covering-node (point))
-      (and (> (point) (point-min)) (scss2--covering-node (1- (point))))))
+      (and (> (point) (point-min)) (scss2--covering-node (1- (point))))
+      (when-let* ((node (scss2--containing-node)))
+        (unless (or (member (treesit-node-type node) scss2--statement-containers)
+                    (when-let* ((body (scss2--block-bounds node)))
+                      (<= (car body) (point) (cdr body)))
+                    ;; A blank line in a multi-line value or list belongs to no entity.
+                    (and (save-excursion (beginning-of-line) (looking-at-p "[ \t]*\r?$"))
+                         (not (scss2--ancestor node '("string" "block_comment" "inline_comment")))))
+          node))))
 
 (defun scss2--containing-node ()
   "Return the nearest node whose source bounds contain point."
