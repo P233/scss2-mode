@@ -441,6 +441,26 @@ With prefix BLOCK, copy the nearest complete structural block."
       (kill-new (buffer-substring-no-properties
                  (scss2--target-beg target) (scss2--target-end target))))))
 
+(defun scss2--end-of-trailing-comment (position)
+  "Return the end of a comment that follows POSITION on its line, or POSITION."
+  (save-excursion
+    (goto-char position)
+    (skip-chars-forward " \t")
+    (if-let* ((comment (scss2--ancestor (scss2--covering-node (point))
+                                       '("block_comment" "inline_comment"))))
+        (treesit-node-end comment)
+      position)))
+
+(defun scss2--comma-separator (target)
+  "Return the comma and following whitespace that join TARGET's branches."
+  (if-let* ((comma (or (scss2--target-before target) (scss2--target-after target))))
+      (save-excursion
+        (scss2--with-font-lock-view
+          (goto-char (treesit-node-end comma))
+          (concat "," (buffer-substring-no-properties
+                       (point) (progn (skip-chars-forward " \t\r\n") (point))))))
+    ", "))
+
 ;;;###autoload
 (defun scss2-duplicate (&optional block)
   "Duplicate the entity, preserving its body text and the kill ring.
@@ -452,18 +472,24 @@ With prefix BLOCK, duplicate the nearest complete structural block."
     (scss2--transaction
       (goto-char (scss2--target-end target))
       (insert
-       (if (eq (scss2--target-separator target) 'comma) ", "
+       (if (eq (scss2--target-separator target) 'comma)
+           (scss2--comma-separator target)
          (concat
           (when (and (not (string-suffix-p ";" text))
                      (not (scss2--block-bounds (scss2--target-owner target)))) ";")
-          (save-excursion
-            (end-of-line)
-            (when (eobp) (search-backward "\n" nil t))
-            (if (eq (char-before) ?\r) "\r\n" "\n"))
-          (save-excursion
-            (goto-char (scss2--target-beg target))
-            (buffer-substring-no-properties
-             (line-beginning-position) (progn (back-to-indentation) (point)))))))
+          (if (scss2--whole-lines (cons (scss2--target-beg target)
+                                        (scss2--end-of-trailing-comment
+                                         (scss2--target-end target))))
+              (concat
+               (save-excursion
+                 (end-of-line)
+                 (when (eobp) (search-backward "\n" nil t))
+                 (if (eq (char-before) ?\r) "\r\n" "\n"))
+               (save-excursion
+                 (goto-char (scss2--target-beg target))
+                 (buffer-substring-no-properties
+                  (line-beginning-position) (progn (back-to-indentation) (point)))))
+            " "))))
       (insert text))))
 
 ;;;###autoload

@@ -335,11 +335,24 @@
 (ert-deftest scss2-edit-duplicate-preserves-inner-text-and-final-semicolon ()
   (scss2-edit-test--buffer 'css2-mode ".a { col│or: red }"
     (scss2-duplicate)
-    (should (equal (buffer-string) ".a { color: red;\ncolor: red }"))
+    (should (equal (buffer-string) ".a { color: red; color: red }"))
     (should (equal kill-ring '("previous kill"))))
   (scss2-edit-test--buffer 'css2-mode ".a, .│b { x: 1; }"
     (scss2-duplicate)
     (should (equal (buffer-string) ".a, .b, .b { x: 1; }")))
+  ;; A trailing comment does not make an entity share its line.
+  (dolist (comment '("// note" "/* note */"))
+    (scss2-edit-test--buffer 'scss2-mode (concat ".a {\n  co│lor: red; " comment "\n  x: 1;\n}")
+      (scss2-duplicate)
+      (should (equal (buffer-string)
+                     (concat ".a {\n  color: red;\n  color: red; " comment "\n  x: 1;\n}")))))
+  ;; Branches keep their list's layout.
+  (dolist (case '((".a,\n.│b { x: 1; }" ".a,\n.b,\n.b { x: 1; }")
+                  ("  .│a,\n  .b { x: 1; }" "  .a,\n  .a,\n  .b { x: 1; }")
+                  (".│a,.b { x: 1; }" ".a,.a,.b { x: 1; }")))
+    (scss2-edit-test--buffer 'scss2-mode (car case)
+      (scss2-duplicate)
+      (should (equal (buffer-string) (cadr case)))))
   (scss2-edit-test--buffer 'scss2-mode
       "@m│ixin paint() {\n  --raw: { literal: \"  value  \"; };\n}"
     (let ((source (buffer-string)))
@@ -401,7 +414,7 @@
     (scss2-edit-test--buffer mode ".a { fo│nt: { size: 12px; } color: red; }"
       (scss2-duplicate)
       (should (equal (buffer-string)
-                     ".a { font: { size: 12px; }\nfont: { size: 12px; } color: red; }"))
+                     ".a { font: { size: 12px; } font: { size: 12px; } color: red; }"))
       (should (equal kill-ring '("previous kill"))))))
 
 (ert-deftest scss2-edit-flat-pseudo-arguments-keep-outer-selector-branches ()
@@ -848,7 +861,7 @@
       (should (equal (car kill-ring) "content: \"abcd\";")))
     (let ((ring (copy-sequence kill-ring)))
       (scss2-duplicate)
-      (should (equal (buffer-string) ".a { content: \"abcd\";\ncontent: \"abcd\"; }"))
+      (should (equal (buffer-string) ".a { content: \"abcd\"; content: \"abcd\"; }"))
       (should (equal kill-ring ring)))))
 
 (ert-deftest scss2-edit-clipboard-buffer-switch-failure-restores-origin ()
