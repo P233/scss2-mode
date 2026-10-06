@@ -12,6 +12,7 @@
 
 (require 'cl-lib)
 (require 'newcomment)
+(require 'pulse)
 (require 'scss2-syntax)
 (require 'subr-x)
 (declare-function yas-active-snippets "yasnippet" (&optional beg end))
@@ -461,12 +462,14 @@ With prefix BLOCK, clear the nearest structural block's body."
 ;;;###autoload
 (defun scss2-copy (&optional block)
   "Copy the same entity as `scss2-kill', preserving point and mark.
-With prefix BLOCK, copy the nearest complete structural block."
+Briefly highlight what was copied.  With prefix BLOCK, copy the nearest
+complete structural block."
   (interactive "P")
   (let ((target (scss2--resolve-target (and block 'block))))
     (scss2--transaction
       (kill-new (buffer-substring-no-properties
-                 (scss2--target-beg target) (scss2--target-end target))))))
+                 (scss2--target-beg target) (scss2--target-end target))))
+    (pulse-momentary-highlight-region (scss2--target-beg target) (scss2--target-end target))))
 
 (defun scss2--end-of-trailing-comment (position)
   "Return the end of a comment that follows POSITION on its line, or POSITION."
@@ -490,7 +493,8 @@ With prefix BLOCK, copy the nearest complete structural block."
 ;;;###autoload
 (defun scss2-duplicate (&optional block)
   "Duplicate the entity, preserving its body text and the kill ring.
-With prefix BLOCK, duplicate the nearest complete structural block."
+Briefly highlight the copy.  With prefix BLOCK, duplicate the nearest
+complete structural block."
   (interactive "P")
   (let* ((target (scss2--resolve-target (and block 'block)))
          (text (buffer-substring-no-properties
@@ -516,7 +520,8 @@ With prefix BLOCK, duplicate the nearest complete structural block."
                  (buffer-substring-no-properties
                   (line-beginning-position) (progn (back-to-indentation) (point)))))
             " "))))
-      (insert text))))
+      (insert text)
+      (pulse-momentary-highlight-region (- (point) (length text)) (point)))))
 
 ;;;###autoload
 (defun scss2-mark (&optional block)

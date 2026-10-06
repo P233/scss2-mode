@@ -616,6 +616,18 @@
   (scss2-edit-test--buffer 'scss2-mode "[data-x=\"f│oo\" { color: red; }"
     (scss2-edit-test--unchanged #'scss2-empty)))
 
+(ert-deftest scss2-edit-copy-and-duplicate-highlight-their-text ()
+  (scss2-edit-test--buffer 'scss2-mode ".a {\n  co│lor: red;\n}"
+    (let (highlights)
+      (cl-letf (((symbol-function 'pulse-momentary-highlight-region)
+                 (lambda (beg end &rest _)
+                   (push (buffer-substring-no-properties beg end) highlights))))
+        (scss2-copy)
+        (scss2-duplicate))
+      (should (equal highlights '("color: red;" "color: red;")))
+      (should (equal (buffer-substring-no-properties (line-beginning-position) (point))
+                     "  color: red;")))))
+
 (ert-deftest scss2-edit-prefixed-mark-after-mark-selects-the-block ()
   (scss2-edit-test--buffer 'scss2-mode ".a {\n  co│lor: red;\n}"
     (let ((transient-mark-mode t))

@@ -83,9 +83,9 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 | --- | --- |
 | `scss2-kill` | Kill a selector branch, complete declaration, leaf statement such as `@include foo;`, or at-rule block |
 | `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration, map entry or `@return`-style value, or `@if` condition |
-| `scss2-copy` | Copy the same entity as kill |
+| `scss2-copy` | Copy the same entity as kill, briefly highlighting it |
 | `scss2-comment-uncomment` | Comment the entity, or uncomment the comment at point (one `//` line at a time) |
-| `scss2-duplicate` | Duplicate the entity with its comma or statement separator |
+| `scss2-duplicate` | Duplicate the entity with its comma or statement separator, briefly highlighting the copy |
 | `scss2-mark` | Select the entity; repeated calls keep the selection |
 | `scss2-avy-word` | Jump to a word inside the invocation's complete rule or at-rule block |
 | `scss2-expand` | Expand a declaration abbreviation |
