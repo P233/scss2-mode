@@ -955,6 +955,15 @@
           (let ((last-command 'undo)) (undo-only 1))
           (should (equal (buffer-string) original)))))))
 
+(ert-deftest scss2-edit-multiline-line-comment-aligns-its-markers ()
+  (scss2-edit-test--buffer 'scss2-mode ".a {\n  .inner {\n    x: 1│;\n  }\n  color: red;\n}"
+    (scss2-comment-uncomment t)
+    (should (equal (buffer-string)
+                   ".a {\n//   .inner {\n//     x: 1;\n//   }\n  color: red;\n}"))
+    (search-forward "color")
+    (scss2-comment-uncomment)
+    (should (string-search "\n  // color: red;\n" (buffer-string)))))
+
 (ert-deftest scss2-edit-comment-indented-block-preserves-blank-line-whitespace ()
   (dolist (ending '("\n" "\r\n"))
     (scss2-edit-test--buffer 'scss2-mode

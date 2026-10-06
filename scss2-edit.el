@@ -553,7 +553,11 @@ With prefix BLOCK, comment the nearest complete structural block."
                               (scss2--whole-lines (cons begin end))))))
     (when (and line-comment (not comment))
       ;; At CRLF's CR, newcomment otherwise inserts an extra LF.
-      (setq end (save-excursion (goto-char end) (skip-chars-forward " \t\r") (point))))
+      (setq end (save-excursion (goto-char end) (skip-chars-forward " \t\r") (point)))
+      ;; Plain style puts later lines' markers in column 0, so put the first's there too.
+      (save-excursion
+        (goto-char begin)
+        (when (< (line-end-position) end) (setq begin (line-beginning-position)))))
     (scss2--transaction
       (let ((comment-start (if line-comment "// " "/* "))
             (comment-end (if line-comment "" " */"))
