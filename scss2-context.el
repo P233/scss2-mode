@@ -143,7 +143,7 @@ can hold an abbreviation's raw value, including selector-like punctuation."
 Comments can separate the statements.  An explicit selector continuation
 on the following line keeps the selector role."
   (let ((previous (treesit-node-prev-sibling (treesit-node-parent selectors) t)))
-    (while (and previous (member (treesit-node-type previous) '("block_comment" "inline_comment")))
+    (while (and previous (member (treesit-node-type previous) scss2--comment-types))
       (setq previous (treesit-node-prev-sibling previous t)))
     (and previous (member (treesit-node-type previous) scss2--declaration-types)
          (when-let* ((semicolon (scss2--child previous ";")))
@@ -266,7 +266,7 @@ accept the simple unqualified var() spelling of the text."
       (or (when arguments
             (let ((first (cl-find-if
                           (lambda (child)
-                            (not (member (treesit-node-type child) '("(" "block_comment" "inline_comment"))))
+                            (not (member (treesit-node-type child) (cons "(" scss2--comment-types))))
                           (scss2--children arguments))))
               (and (equal (treesit-node-type call) "call_expression")
                    (treesit-node-eq arguments (treesit-node-child-by-field-name call "arguments"))
@@ -597,7 +597,7 @@ Sass member contexts may carry :module.  Incomplete input is intentional."
     (let* ((position (point))
            (node (scss2--node-at-point))
            (state (syntax-ppss))
-           (comment (scss2--ancestor node '("block_comment" "inline_comment")))
+           (comment (scss2--ancestor node scss2--comment-types))
            (interpolation-node (scss2--ancestor node '("interpolation")))
            (in-interpolation
             (and interpolation-node

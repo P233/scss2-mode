@@ -408,6 +408,9 @@ any other continuation indents once more."
     "css_statement" "page_statement" "query_statement" "scope_statement"
     "at_rule"))
 
+(defconst scss2--comment-types '("block_comment" "inline_comment")
+  "Comment node types shared by context and structural editing.")
+
 (defconst scss2--declaration-types
   '("property_declaration" "variable_declaration")
   "Declaration owners shared by context and structural editing.")

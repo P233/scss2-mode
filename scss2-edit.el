@@ -64,7 +64,7 @@ which changes no text, an accessible target suffices."
 
 (defun scss2--comment-p (node)
   "Whether NODE is a stylesheet comment."
-  (member (treesit-node-type node) '("block_comment" "inline_comment")))
+  (member (treesit-node-type node) scss2--comment-types))
 
 (defun scss2--statement-p (node)
   "Whether NODE is a stylesheet statement."
@@ -124,7 +124,7 @@ whitespace between statements touches nothing."
                       (<= (car body) (point) (cdr body)))
                     ;; A blank line in a multi-line value or list belongs to no entity.
                     (and (save-excursion (beginning-of-line) (looking-at-p "[ \t]*\r?$"))
-                         (not (scss2--ancestor node '("string" "block_comment" "inline_comment")))))
+                         (not (scss2--ancestor node (cons "string" scss2--comment-types)))))
           node))))
 
 (defun scss2--containing-node ()
@@ -155,7 +155,7 @@ Only explicit block selection may cross a leaf statement boundary."
       (_
        (setq node (or (scss2--touched-node)
                       (user-error "Point is not on a stylesheet target")))
-       (when (scss2--ancestor node '("block_comment" "inline_comment"))
+       (when (scss2--ancestor node scss2--comment-types)
          (user-error "Comments can be uncommented with scss2-comment-uncomment"))
        (if-let* ((selectors (scss2--selector-owner node)))
            (scss2--selector-target selectors)
@@ -449,8 +449,7 @@ With prefix BLOCK, copy the nearest complete structural block."
   (save-excursion
     (goto-char position)
     (skip-chars-forward " \t")
-    (if-let* ((comment (scss2--ancestor (scss2--covering-node (point))
-                                       '("block_comment" "inline_comment"))))
+    (if-let* ((comment (scss2--ancestor (scss2--covering-node (point)) scss2--comment-types)))
         (treesit-node-end comment)
       position)))
 
@@ -535,8 +534,7 @@ With prefix BLOCK, comment the nearest complete structural block."
   (interactive "P")
   (let* ((comment (unless block
                     (scss2--with-font-lock-view
-                      (scss2--ancestor (scss2--touched-node)
-                                       '("block_comment" "inline_comment")))))
+                      (scss2--ancestor (scss2--touched-node) scss2--comment-types))))
          (target (if comment
                      (scss2--check-target
                       (scss2--with-font-lock-view (scss2--comment-target comment)))
