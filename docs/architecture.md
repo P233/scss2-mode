@@ -240,12 +240,23 @@ Semantic tables obey Emacs's literal completion-table protocol. The `scss2` styl
 uses Emmet2's shared matcher with the host's escape/Sass identity function,
 leaving original insertion spellings intact. Function acceptance with status
 `finished` only places point inside empty parentheses; no value completion
-creates snippet fields. TAB uses the current parsed declaration to jump
-from its name to its value's first node, and from its value directly past
-its semicolon, including from nested calls and snippet fields. Other snippet
-navigation keys retain their own behavior; outside accessible declarations
-with a value, and in values without a semicolon, TAB retains its existing
-binding. Common annotation text is
+creates snippet fields. Before a nonempty line's first nonblank character,
+TAB uses the mode's indentation function and moves to that character. A shared
+predicate gives this action the same priority during key lookup and execution;
+blank lines and active regions retain their existing behavior. At the first
+character or later, TAB uses the current parsed declaration to jump from its
+name to its value's first node, and from its value directly past its semicolon,
+including from nested calls and snippet fields. A Sass map key resolves its
+nearest map entry instead of the enclosing declaration, so multiline and nested
+maps follow the same leading-whitespace → key → value sequence. From a map
+value, declaration navigation is unchanged. Name/key-to-value navigation first
+reindents the current line unless a region is active or the line's beginning is
+inaccessible. Correct indentation does not modify text. The destination
+resolver stays read-only for key lookup; the command
+dismisses completion previews before indenting and resolves the destination
+again after indentation changes positions. Other snippet navigation keys
+retain their own behavior; outside these indentation and declaration targets,
+TAB retains its existing binding. Common annotation text is
 derived once per table; display callbacks read that same immutable table context.
 Frontends own timing and drawing. Emmet owns
 its own table, render options, preview, stale-candidate validation and atomic

@@ -190,12 +190,19 @@ conditional branch instead of selecting the whole conditional."
 (defun scss2--resolve-target-1 (kind)
   "Resolve entity KIND in the current tree view.
 Entity commands share configured code types and complete comment groups.
-KIND may request TAB's declaration, or allow kill's if-condition
+KIND may request TAB's map entry or declaration, or allow kill's if-condition
 target.  Selectors and body whitespace share block boundaries."
   (let ((node (scss2--containing-node)))
     (pcase kind
-      ('property (when-let* ((declaration (scss2--ancestor node scss2--declaration-types)))
-                   (scss2--node-target declaration 'statement)))
+      ('property
+       ;; Map keys own their values; values keep declaration navigation.
+       (when-let* ((owner
+                    (or (when-let* ((entry (scss2--ancestor node '("map_entry")))
+                                    (colon (scss2--child entry ":"))
+                                    (_ (<= (point) (treesit-node-start colon))))
+                          entry)
+                        (scss2--ancestor node scss2--declaration-types))))
+         (scss2--node-target owner)))
       (_
        (let* ((blank-block (scss2--body-whitespace-block node))
               (touched (scss2--touched-node))
@@ -354,12 +361,13 @@ A parameter without a default value has no bounds."
           (scss2--make-target :owner owner :beg (car bounds) :end (cdr bounds))
         (user-error "Nothing to empty here"))))))
 
-(defun scss2--declaration-tab-target ()
-  "Return where TAB moves within the declaration at point, or nil.
-From the name, move to the start of the value, past any comment; from the
-value, move past the declaration's direct semicolon, including inside
-strings, URLs, comments and nested calls.  Return nil for an inaccessible
-declaration, one without a direct colon or value, and a value without `;'."
+(defun scss2--declaration-tab-target (&optional name-only)
+  "Return where TAB moves within a declaration or map entry, or nil.
+From a name or map key, move to its value, past any comment; from a value,
+move past the enclosing declaration's direct semicolon, including inside
+strings, URLs, comments, maps and nested calls.  Return nil for an
+inaccessible target, one without a direct colon or value, and a value
+without `;'.  With NAME-ONLY, only move from a name or map key to its value."
   (when-let* ((target (condition-case nil (scss2--resolve-target 'property)
                        (user-error nil)))
               (owner (scss2--target-owner target))
@@ -367,15 +375,25 @@ declaration, one without a direct colon or value, and a value without `;'."
     (if (<= (point) (treesit-node-start colon))
         (when-let* ((value (treesit-node-child-by-field-name owner "value")))
           (treesit-node-start value))
-      (when-let* ((semicolon (scss2--child owner ";"))
+      (when-let* ((_ (not name-only))
+                  (semicolon (scss2--child owner ";"))
                   (_ (<= (point) (treesit-node-start semicolon))))
         (treesit-node-end semicolon)))))
 
+(defun scss2--tab-indentation-p ()
+  "Whether point precedes the first nonblank character of a nonempty line.
+An active region keeps its existing TAB behavior."
+  (and (not (use-region-p))
+       (let ((position (point)))
+         (save-excursion
+           (back-to-indentation)
+           (and (< position (point)) (not (looking-at-p "\r?$")))))))
+
 (defun scss2--tab-binding (command)
-  "Use COMMAND only when point has a declaration position to navigate to.
+  "Use COMMAND for leading indentation or declaration navigation.
 Resolve this during key lookup so frontend pre-command hooks see their own
-command when navigation does not apply."
-  (and (scss2--declaration-tab-target) command))
+command when neither action applies."
+  (and (or (scss2--tab-indentation-p) (scss2--declaration-tab-target)) command))
 
 (defun scss2--tab-remapping (command)
   "Remap COMMAND only while reading a plain TAB key.
@@ -390,35 +408,50 @@ commands need remapping for TAB, but keep any other keys the user binds."
   `((scss2-dialect . ,(let ((map (make-sparse-keymap)))
                       (dolist (key '("TAB" "<tab>"))
                         (define-key map (kbd key)
-                                    '(menu-item "Move through declaration" scss2-tab
+                                    '(menu-item "Indent or move through declaration" scss2-tab
                                                 :filter scss2--tab-binding)))
                       (dolist (command '(yas-next-field yas-next-field-or-maybe-expand
                                          company-complete-common-or-cycle))
                         (define-key map (vector 'remap command)
-                                    '(menu-item "Move through declaration" scss2-tab
+                                    '(menu-item "Indent or move through declaration" scss2-tab
                                                 :filter scss2--tab-remapping)))
                       map)))
-  "Declaration navigation takes precedence over completion and snippet TAB maps.
+  "Leading indentation and declaration navigation precede frontend TAB maps.
 The existing buffer-local dialect enables it only in stylesheet buffers.")
 
 ;;;###autoload
 (defun scss2-tab ()
-  "Move from a declaration's name to its value, or from its value past `;'.
+  "Indent leading whitespace, or move through a declaration or map entry.
+Before a nonempty line's first character, indent and move to that character.
+From a declaration's name or map key move to its value; from a value, move
+past the enclosing declaration's `;'.
+Before moving from a name or key, reindent its line unless a region is active
+or the line's beginning is outside the accessible buffer.
 Dismiss an open completion menu without accepting a candidate.  Elsewhere
 move to the next snippet field, or indent with `indent-for-tab-command'."
   (interactive)
-  (if (scss2--declaration-tab-target)
-      (progn
-        (when completion-in-region-mode (completion-in-region-mode -1))
-        (when (and (bound-and-true-p company-candidates) (fboundp 'company-abort))
-          (company-abort))
-        ;; A frontend can remove preview text while closing its menu.
-        (when-let* ((destination (scss2--declaration-tab-target)))
-          (goto-char destination)
-          (deactivate-mark)))
-    (if (and (fboundp 'yas-active-snippets) (yas-active-snippets))
-        (yas-next-field)
-      (call-interactively #'indent-for-tab-command))))
+  (let ((indent (scss2--tab-indentation-p)))
+    (if (or indent (scss2--declaration-tab-target))
+        (progn
+          (when completion-in-region-mode (completion-in-region-mode -1))
+          (when (and (bound-and-true-p company-candidates) (fboundp 'company-abort))
+            (company-abort))
+          (if indent
+              (progn
+                (indent-according-to-mode)
+                (back-to-indentation)
+                (deactivate-mark))
+            ;; Resolve after dismissing previews, and again after indentation.
+            (when (and (not (use-region-p)) (scss2--declaration-tab-target t)
+                       (<= (point-min)
+                           (save-restriction (widen) (line-beginning-position))))
+              (indent-according-to-mode))
+            (when-let* ((destination (scss2--declaration-tab-target)))
+              (goto-char destination)
+              (deactivate-mark))))
+      (if (and (fboundp 'yas-active-snippets) (yas-active-snippets))
+          (yas-next-field)
+        (call-interactively #'indent-for-tab-command)))))
 
 (defmacro scss2--transaction (&rest body)
   "Evaluate BODY as one edit, restoring editor state on failure."
