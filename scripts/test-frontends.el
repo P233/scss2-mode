@@ -1,6 +1,6 @@
 ;;; test-frontends.el --- Optional Company and Orderless protocols -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: GPL-3.0-or-later
-;; Put real company-mode, orderless, and Emmet2 checkouts on load-path.
+;; Put real company-mode, orderless, compat, and Emmet2 checkouts on load-path.
 ;; Runs real candidate selection and insertion, without popup drawing.
 
 (require 'ert)

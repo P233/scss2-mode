@@ -1,7 +1,7 @@
 ;;; test-corfu.el --- Optional real Corfu/YAS integration -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: GPL-3.0-or-later
-;; Run after Emmet's test/bootstrap.el, with this checkout on load-path.
-;; Uses the dependency's pinned Corfu and YAS; only popup drawing is stubbed.
+;; Put this checkout, Emmet2, Corfu (including extensions), compat and YAS on load-path.
+;; CI pins the same Corfu and YAS as Emmet's tests; only popup drawing is stubbed.
 
 (require 'ert)
 (require 'scss2-mode)

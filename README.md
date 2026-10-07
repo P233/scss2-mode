@@ -169,7 +169,14 @@ make package
 
 `make check` verifies the bundled parser against its manifest, runs the isolated core and semantic suites, the Python tests, and the full ERT suite after strict byte compilation, then reruns the suite in a temporary package installation; your installed packages are untouched. `SCSS2_EMMET2_DIR` defaults to `../emmet2-mode`; `make test-core` needs no Emmet checkout. `make package` builds `dist/scss2-mode-<version>.tar` from tracked files and rejects a dirty parser snapshot.
 
-Optional checks (popup drawing excluded):
+CI also runs `make test-frontends` with the Corfu, compat, yasnippet,
+company-mode, orderless and avy revisions pinned in `.github/workflows/check.yml`.
+To run the same checks locally, place those checkouts under
+`SCSS2_FRONTEND_DIR` (default `.dependencies/`), using those package names as
+directory names, and run `make test-frontends`. Missing dependencies fail the
+checks. Popup and Avy label drawing still need GUI checks.
+
+Benchmarks and individual integration checks:
 
 ```sh
 # Mode setup, parsing and fontification benchmark; compare separate processes
@@ -181,7 +188,8 @@ EMMET2_TEST_DEPS=/path/to/emmet2-test-deps emacs -Q --batch -L . \
   -l /path/to/emmet2-mode/test/bootstrap.el -l scripts/test-corfu.el
 # Company/Orderless
 emacs -Q --batch -L . -L /path/to/emmet2-mode \
-  -L /path/to/company-mode -L /path/to/orderless -l scripts/test-frontends.el
+  -L /path/to/company-mode -L /path/to/orderless -L /path/to/compat \
+  -l scripts/test-frontends.el
 # Avy: real candidates, key selection, cancellation and window isolation
 emacs -Q --batch -L . -L /path/to/avy -l scripts/test-avy.el
 ```
@@ -193,7 +201,7 @@ python3 scripts/vendor-parser.py --source /path/to/tree-sitter-scss
 SCSS2_EMMET2_DIR=/path/to/emmet2-mode make check
 ```
 
-The manifest records imported content, including uncommitted changes; `make package` requires a committed snapshot. CI runs `make check` and `make package` with Emacs 31.1 on Linux and macOS against the pinned Emmet2 commit; advance that pin in the commit that starts depending on newer Emmet2 code.
+The manifest records imported content, including uncommitted changes; `make package` requires a committed snapshot. CI runs `make check test-frontends` and `make package` with Emacs 31.1 on Linux and macOS against the pinned Emmet2 commit; advance that pin in the commit that starts depending on newer Emmet2 code.
 
 </details>
 

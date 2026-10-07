@@ -29,9 +29,39 @@ jobs:
           repository: P233/emmet2-mode
           ref: 66ce92a56aa8738a30774062af8c12a48edda7e0
           path: .dependencies/emmet2-mode
-      - name: Check editor and first package installation
+      - uses: actions/checkout@v7
+        with:
+          repository: minad/corfu
+          ref: b468efac023dda39332acc943edc9895c80b5a6f
+          path: .dependencies/corfu
+      - uses: actions/checkout@v7
+        with:
+          repository: emacs-straight/compat
+          ref: 9f8a565ad8c9617a6f006115f50f4cf63286ec83
+          path: .dependencies/compat
+      - uses: actions/checkout@v7
+        with:
+          repository: joaotavora/yasnippet
+          ref: c1e6ff23e9af16b856c88dfaab9d3ad7b746ad37
+          path: .dependencies/yasnippet
+      - uses: actions/checkout@v7
+        with:
+          repository: company-mode/company-mode
+          ref: 276b5b44a467d072904cefa28779b89fb469319a
+          path: .dependencies/company-mode
+      - uses: actions/checkout@v7
+        with:
+          repository: oantolin/orderless
+          ref: 3d2c2e6468ddf51e69c78e8212e5fd9006d2ce8a
+          path: .dependencies/orderless
+      - uses: actions/checkout@v7
+        with:
+          repository: abo-abo/avy
+          ref: 933d1f36cca0f71e4acb5fac707e9ae26c536264
+          path: .dependencies/avy
+      - name: Check editor, frontends and first package installation
         env:
           SCSS2_EMMET2_DIR: ${{ github.workspace }}/.dependencies/emmet2-mode
-        run: make check
+        run: make check test-frontends
       - name: Build release package
         run: make package
