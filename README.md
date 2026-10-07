@@ -87,7 +87,7 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 | `scss2-comment-uncomment` | Comment the nearest map entry, declaration, statement or complete rule, or uncomment the comment group at point |
 | `scss2-duplicate` | Duplicate the entity with its comma, statement separator or comment line break, briefly highlighting the copy |
 | `scss2-mark` | Select the nearest entity or map key/value pair; repeated calls keep the selection |
-| `scss2-avy-word` | Jump to a word inside the invocation's complete rule or at-rule block |
+| `scss2-avy-word` | Jump to a word inside the nearest complete multiline container |
 | `scss2-expand` | Expand a declaration abbreviation |
 
 Structural commands ignore prefix arguments such as `C-u`; point determines
@@ -160,13 +160,21 @@ rule or at-rule; inside value whitespace they find the enclosing pair or declara
 Existing comments are always selected as comment groups. Empty resolves the
 entity's internal contents and Avy resolves its navigation container separately.
 The whitespace immediately after a child's closing brace belongs to its parent,
-A cursor on the closing brace still belongs
+including for Avy. A cursor on the closing brace still belongs
 to the child. Uncomment may still select the comment immediately before point.
 
 Avy is optional: install [Avy](https://github.com/abo-abo/avy) to use
-`scss2-avy-word`. Its range is the nearest complete rule or at-rule at invocation,
-including the header and nested blocks, rather than the visible window range.
-Nested property bodies and raw value containers do not narrow that range.
+`scss2-avy-word`. From point, it finds the nearest complete multiline container:
+a rule, at-rule or nested property block, map, parenthesized or bracketed list,
+or module configuration (`with (...)`). Arguments and parameters continue upward
+to a qualifying container, such as their complete function or mixin block.
+Single-line containers are skipped in favor of an enclosing multiline container;
+if none exists, the command reports no target. Ordinary declarations, individual
+map entries, strings, comments and raw value groups are not navigation containers.
+The full container, including its header or delimiters, fixes the range at
+invocation. Conditional blocks include the whole `@if`/`@else` chain. The closing
+delimiter belongs to its container; point immediately after it belongs to the
+parent. The range is independent of the visible window range.
 Candidates stay in the invoking window; label display follows Avy's usual behavior.
 
 ```elisp

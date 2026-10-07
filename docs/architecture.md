@@ -737,9 +737,16 @@ CRLF and adds no statement separator to comments; even a trailing `//` copy
 gets its own line. Repeated mark keeps its existing selection. Input errors and inaccessible
 ranges are rejected before mutation, and transactions roll back failed edits.
 
-Avy is loaded only by its command. Its bounds come from the nearest complete
-rule or at-rule, excluding small value containers and nested property blocks.
-The entire block, including its header, is passed unchanged to Avy; both Avy
+Avy is loaded only by its command. Its independent ancestor walk selects the
+nearest complete multiline container: a rule, at-rule or nested property block,
+map, list or module configuration. Argument and parameter lists continue upward
+to a qualifying container, as do single-line containers.
+Ordinary declarations, map entries, strings, comments and raw value groups do
+not become navigation scopes. Existing direct
+delimiter checks establish complete boundaries, and an else branch selects its
+whole conditional. A closing delimiter belongs to its container; point after
+it belongs to the parent, including between map entries. The entire container,
+including its header or delimiters, is passed unchanged to Avy; both Avy
 window settings and the prefix argument are locally disabled. This prevents
 another buffer from receiving the same numeric range. Label rendering and
 off-screen interaction follow Avy; no paging or scrolling layer is added.

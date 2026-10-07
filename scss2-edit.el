@@ -739,20 +739,42 @@ markers at the region's minimum indentation."
               (comment-style (if line-comment 'indent 'multi-line)))
           (if comment (uncomment-region begin end) (comment-region begin end)))))))
 
+(defun scss2--navigation-target ()
+  "Find the nearest complete multiline container around point.
+Blocks include their headers; an else branch keeps its whole conditional.
+Maps, lists and module configurations keep their delimiters.
+Point after a container's closing delimiter belongs to its parent."
+  (let ((node (scss2--containing-node)) target)
+    (while (and node (= (point) (treesit-node-end node)))
+      (setq node (treesit-node-parent node)))
+    (while (and node (not target))
+      (when (equal (treesit-node-type node) "else_clause")
+        (setq node (treesit-node-parent node)))
+      (when (and (or (scss2--block-bounds node)
+                     (and (member (treesit-node-type node)
+                                  '("map" "list" "configuration"))
+                          (scss2--interior node)))
+                 (save-excursion
+                   (goto-char (treesit-node-start node))
+                   (search-forward "\n" (treesit-node-end node) t)))
+        (setq target (scss2--node-target node)))
+      (setq node (treesit-node-parent node)))
+    target))
+
 ;;;###autoload
 (defun scss2-avy-word ()
-  "Jump to a word in the nearest complete rule or at-rule, including its header.
-The invocation's block fixes the range; other windows are not searched.
+  "Jump to a word in the nearest complete multiline container.
+Containers include rule, at-rule and nested property blocks, maps, lists
+and module configurations.  Single-line containers continue upward.
+The invocation fixes the full range,
+including headers and delimiters; other windows are not searched.
 Requires the optional Avy package."
   (interactive)
   (unless (require 'avy nil t) (user-error "Install Avy to use scss2-avy-word"))
   (let ((target
          (scss2--check-target
           (scss2--with-font-lock-view
-            (let ((node (scss2--block-node (scss2--containing-node))))
-              (while (and node (member (treesit-node-type node) scss2--declaration-types))
-                (setq node (scss2--block-node (treesit-node-parent node))))
-              (when node (scss2--node-target node))))
+            (scss2--navigation-target))
           t))
         (avy-all-windows nil) (avy-all-windows-alt nil)
         (current-prefix-arg nil))

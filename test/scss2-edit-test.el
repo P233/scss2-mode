@@ -2105,17 +2105,139 @@
         (undo-only 1)
         (should (equal (buffer-string) source))))))
 
-(ert-deftest scss2-edit-avy-rejects-inaccessible-and-incomplete-blocks ()
-  (dolist (source '(".a { color: re│d; }" ".a { color: re│d;"))
-    (scss2-edit-test--buffer 'css2-mode source
-      (when (string-suffix-p "}" (buffer-string)) (narrow-to-region (point) (point-max)))
-      (let ((require-function (symbol-function 'require)))
+(ert-deftest scss2-edit-avy-fixes-full-container-scope-at-invocation ()
+  (dolist (case '((".outer { .inner {\n color: re│d;\n} .sibling {} }"
+                   ".inner {\n color: red;\n}")
+                  (".outer { .inner {\n color: red;\n│} .sibling {} }"
+                   ".inner {\n color: red;\n}")
+                  (".outer { .inner {\n color: red;\n}│ .sibling {} }"
+                   ".outer { .inner {\n color: red;\n} .sibling {} }")
+                  (".outer { font: {\n size: │12px;\n} .inner {} }"
+                   "font: {\n size: 12px;\n}")
+                  (".outer { --raw: {\n nested: │word\n}; }"
+                   ".outer { --raw: {\n nested: word\n}; }")
+                  ("@if $x {}\n@else { x: │2; }" "@if $x {}\n@else { x: 2; }")
+                  ("@media screen {\n .a {}\n │\n}" "@media screen {\n .a {}\n \n}")
+                  ("@keyframes fade { from {\n opacity: │0;\n} to {} }"
+                   "from {\n opacity: 0;\n}")
+                  ("$m: (\n a: │1,\n b: 2,\n);" "(\n a: 1,\n b: 2,\n)")
+                  ("$m: (\n a: │(x: 1),\n b: 2,\n);" "(\n a: (x: 1),\n b: 2,\n)")
+                  ("$m: (\n a: (\n x: │1,\n ),\n b: 2,\n);" "(\n x: 1,\n )")
+                  ("$m: (\n a: (\n x: 1,\n │),\n b: 2,\n);" "(\n x: 1,\n )")
+                  ("$m: (\n a: (\n x: 1,\n )│,\n b: 2,\n);"
+                   "(\n a: (\n x: 1,\n ),\n b: 2,\n)")
+                  ("$m: (\n a: 1,\n │\n b: 2,\n);" "(\n a: 1,\n \n b: 2,\n)")
+                  ("$m: (\n a: /* no│te */ 1,\n b: 2,\n);" "(\n a: /* note */ 1,\n b: 2,\n)")
+                  ("$list: (\n re│d,\n blue,\n);" "(\n red,\n blue,\n)")
+                  ("$list: [\n re│d,\n blue,\n];" "[\n red,\n blue,\n]")
+                  ("@use 'theme' with (\n $color: re│d,\n $size: 1rem,\n);"
+                   "with (\n $color: red,\n $size: 1rem,\n)")
+                  (".a { @include foo(\n $color: re│d,\n $size: 1rem,\n); }"
+                   ".a { @include foo(\n $color: red,\n $size: 1rem,\n); }")
+                  (".a { color: foo(\n re│d,\n blue\n); }"
+                   ".a { color: foo(\n red,\n blue\n); }")
+                  ("@mixin foo(\n $color: re│d,\n $size: 1rem\n) { color: $color; }"
+                   "@mixin foo(\n $color: red,\n $size: 1rem\n) { color: $color; }")
+                  ("@function foo(\n $color: re│d,\n $size: 1rem\n) { @return $color; }"
+                   "@function foo(\n $color: red,\n $size: 1rem\n) { @return $color; }")
+                  ("$m: (\n tone: foo(\n re│d\n),\n size: 1\n);"
+                   "(\n tone: foo(\n red\n),\n size: 1\n)")
+                  ("@include foo((\n tone: re│d,\n size: 1\n));"
+                   "(\n tone: red,\n size: 1\n)")
+                  ("@include foo([\n re│d, blue\n]);" "[\n red, blue\n]")
+                  ;; Navigation tolerates an unfinished declaration in the block.
+                  (".outer { .a {\n color: red; wi│\n} .b {} }" ".a {\n color: red; wi\n}")))
+    (scss2-edit-test--buffer 'scss2-mode (car case)
+      (let ((require-function (symbol-function 'require)) (avy-all-windows 'all-frames)
+            (avy-all-windows-alt t) (current-prefix-arg '(4)) (called nil))
         (cl-letf (((symbol-function 'require)
                    (lambda (feature &optional filename noerror)
                      (if (eq feature 'avy) t (funcall require-function feature filename noerror))))
                   ((symbol-function 'avy-goto-word-0)
-                   (lambda (&rest _) (ert-fail "Avy received an invalid scope"))))
-          (scss2-edit-test--unchanged #'scss2-avy-word))))))
+                   (lambda (arg beg end)
+                     (setq called t)
+                     (should-not arg) (should-not avy-all-windows)
+                     (should-not avy-all-windows-alt) (should-not current-prefix-arg)
+                     (should (equal (buffer-substring-no-properties beg end) (nth 1 case))))))
+          (scss2-avy-word)
+          (should called))
+        (should (eq avy-all-windows 'all-frames))
+        (should avy-all-windows-alt)
+        (should (equal current-prefix-arg '(4)))))))
+
+(ert-deftest scss2-edit-avy-skips-single-line-containers ()
+  (dolist (body '(".inner { color: re│d; }" "font: { size: │12px; }"
+                  "$m: (a: │1, b: 2);" "$list: [re│d, blue];"
+                  "@include foo(re│d);" "@mixin foo($x: │1) {}"
+                  ".a {\n color: red;\n}│"))
+    (scss2-edit-test--buffer 'scss2-mode (concat ".outer {\n " body "\n}")
+      (let ((require-function (symbol-function 'require)) (called nil))
+        (cl-letf (((symbol-function 'require)
+                   (lambda (feature &optional filename noerror)
+                     (if (eq feature 'avy) t (funcall require-function feature filename noerror))))
+                  ((symbol-function 'avy-goto-word-0)
+                   (lambda (_arg beg end)
+                     (setq called t)
+                     (should (= beg (point-min)))
+                     (should (= end (point-max))))))
+          (scss2-avy-word)
+          (should called))))))
+
+(ert-deftest scss2-edit-avy-requires-a-multiline-container ()
+  (dolist (source '(".a { color: re│d; }" "@include foo(re│d);"
+                    "@include foo(\n $color: re│d,\n $size: 1rem,\n);"
+                    "$color: foo(\n re│d,\n blue\n);"
+                    "@u│se 'theme';" "$m: (a: │1, b: 2);" "$list: [re│d, blue];"
+                    "$value:\n re│d;" "/* multiline\n co│mment */"
+                    "$text: 'multi\n li│ne';" "$m: (\n a: │1,\n"
+                    ".a {\n color: red;\n}│\n"))
+    (scss2-edit-test--buffer 'scss2-mode source
+      (let ((require-function (symbol-function 'require)) (called nil))
+        (cl-letf (((symbol-function 'require)
+                   (lambda (feature &optional filename noerror)
+                     (if (eq feature 'avy) t (funcall require-function feature filename noerror))))
+                  ((symbol-function 'avy-goto-word-0)
+                   (lambda (&rest _) (setq called t))))
+          (scss2-edit-test--unchanged #'scss2-avy-word)
+          (should-not called))))))
+
+(ert-deftest scss2-edit-avy-rejects-inaccessible-and-incomplete-blocks ()
+  (dolist (source '(".a {\n color: re│d;\n}" ".a {\n color: re│d;"))
+    (scss2-edit-test--buffer 'css2-mode source
+      (when (string-suffix-p "}" (buffer-string)) (narrow-to-region (point) (point-max)))
+      (let ((require-function (symbol-function 'require)) (called nil))
+        (cl-letf (((symbol-function 'require)
+                   (lambda (feature &optional filename noerror)
+                     (if (eq feature 'avy) t (funcall require-function feature filename noerror))))
+                  ((symbol-function 'avy-goto-word-0)
+                   (lambda (&rest _) (setq called t))))
+          (scss2-edit-test--unchanged #'scss2-avy-word)
+          (should-not called))))))
+
+(ert-deftest scss2-edit-avy-container-ranges-handle-crlf-and-narrowing ()
+  (dolist (case '((scss2-mode "$m: (\n a: │1,\n b: 2,\n);" "(\n a: 1,\n b: 2,\n)")
+                  (scss2-mode "$list: [\n re│d,\n blue\n];" "[\n red,\n blue\n]")
+                  (scss2-mode "@use 'theme' with (\n $color: re│d\n);" "with (\n $color: red\n)")
+                  (scss2-mode "@mixin f(\n $x: │1\n) {}" "@mixin f(\n $x: 1\n) {}")
+                  (css2-mode ".a { color: rgb(\n │1, 2, 3\n); }" ".a { color: rgb(\n 1, 2, 3\n); }")
+                  (css2-mode ".a { font: {\n size: │1rem;\n} }" "font: {\n size: 1rem;\n}")))
+    (dolist (ending '("\n" "\r\n"))
+      (scss2-edit-test--buffer (car case) (string-replace "\n" ending (cadr case))
+        (let ((require-function (symbol-function 'require)) (called nil)
+              (expected (string-replace "\n" ending (nth 2 case))))
+          (cl-letf (((symbol-function 'require)
+                     (lambda (feature &optional filename noerror)
+                       (if (eq feature 'avy) t (funcall require-function feature filename noerror))))
+                    ((symbol-function 'avy-goto-word-0)
+                     (lambda (_arg beg end)
+                       (setq called t)
+                       (should (equal (buffer-substring-no-properties beg end) expected)))))
+            (scss2-avy-word)
+            (should called)
+            (setq called nil)
+            (narrow-to-region (point) (point-max))
+            (scss2-edit-test--unchanged #'scss2-avy-word)
+            (should-not called)))))))
 
 (ert-deftest scss2-edit-empty-opening-brace-selects-the-body ()
   (dolist (case '(("@if $x │{ color: red; } @else { color: blue; }"
@@ -2415,34 +2537,6 @@
             (should (equal (buffer-string) original))
             (execute-kbd-macro (kbd "<f7> <f7>"))
             (should (equal (buffer-string) original))))))))
-
-(ert-deftest scss2-edit-avy-fixes-full-block-scope-at-invocation ()
-  (dolist (case '((".outer { .inner { color: re│d; } .sibling {} }"
-                   ".inner { color: red; }")
-                  (".outer { font: { size: │12px; } .inner {} }"
-                   ".outer { font: { size: 12px; } .inner {} }")
-                  (".outer { --raw: { nested: │word }; }"
-                   ".outer { --raw: { nested: word }; }")
-                  ("@if $x {} @else { x: │2; }" "@if $x {} @else { x: 2; }")
-                  ;; Navigation tolerates an unfinished declaration in the block.
-                  (".outer { .a { color: red; wi│ } .b {} }" ".a { color: red; wi }")))
-    (scss2-edit-test--buffer 'scss2-mode (car case)
-      (let ((require-function (symbol-function 'require)) (avy-all-windows 'all-frames)
-            (avy-all-windows-alt t) (current-prefix-arg '(4)) (called nil))
-        (cl-letf (((symbol-function 'require)
-                   (lambda (feature &optional filename noerror)
-                     (if (eq feature 'avy) t (funcall require-function feature filename noerror))))
-                  ((symbol-function 'avy-goto-word-0)
-                   (lambda (arg beg end)
-                     (setq called t)
-                     (should-not arg) (should-not avy-all-windows)
-                     (should-not avy-all-windows-alt) (should-not current-prefix-arg)
-                     (should (equal (buffer-substring-no-properties beg end) (nth 1 case))))))
-          (scss2-avy-word)
-          (should called))
-        (should (eq avy-all-windows 'all-frames))
-        (should avy-all-windows-alt)
-        (should (equal current-prefix-arg '(4)))))))
 
 (provide 'scss2-edit-test)
 ;;; scss2-edit-test.el ends here
