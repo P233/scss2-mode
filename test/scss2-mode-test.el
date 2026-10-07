@@ -508,8 +508,10 @@ COMMANDS default to the bindings of C-M-a and C-M-e."
     (insert ".a { --raw: { literal }; color: red; }")
     (css2-mode)
     (goto-char (point-min)) (search-forward "literal")
-    (scss2-empty t)
-    (should (equal (buffer-string) ".a {}"))))
+    (should (equal (treesit-node-type (scss2--block-node (scss2--containing-node)))
+                   "rule_set"))
+    (let ((current-prefix-arg '(4))) (call-interactively #'scss2-empty))
+    (should (equal (buffer-string) ".a { --raw: {}; color: red; }"))))
 
 (ert-deftest scss2-mode-css-function-result-spellings-have-literal-token-faces ()
   (dolist (mode '(css2-mode scss2-mode))

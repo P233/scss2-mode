@@ -4,8 +4,8 @@
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
-;; Entity commands select declarations and other statements, selector branches
-;; or complete blocks.
+;; Entity commands share one selection of declarations, statements, comments,
+;; map entries and complete blocks.
 ;; Empty resolves content independently.  Targets live for one command only.
 
 ;;; Code:
@@ -22,9 +22,23 @@
 (defvar avy-all-windows)
 (defvar avy-all-windows-alt)
 
+(defcustom scss2-entity-node-types (cons "map_entry" (copy-sequence scss2--statement-types))
+  "Code node types shared by kill, copy, duplicate, mark and comment.
+By default, a map entry, declaration or leaf statement selects itself.
+A rule or at-rule header selects its complete block.  Conditional branches
+select the whole conditional.  On a selector or in a block body's
+inter-statement whitespace, all entity commands select the complete
+enclosing rule or block, regardless of this option.
+Existing comments always select their complete comment group.
+All entity commands ascend from point to the nearest matching ancestor.
+Kill in an if condition selects that condition, preserving the directive.
+Empty resolves internal contents and Avy resolves navigation separately."
+  :type '(repeat string)
+  :group 'scss2)
+
 (cl-defstruct (scss2--target (:constructor scss2--make-target))
   "A transient selection, validated by OWNER, spanning BEG to END.
-Selector branches also carry BEFORE and AFTER commas and their COUNT.
+Map entries carry BEFORE and AFTER commas and their COUNT.
 SEPARATOR describes how to duplicate the selected entity."
   owner beg end before after count separator)
 
@@ -80,29 +94,21 @@ Nested pseudo-class selector lists belong to the enclosing branch."
       (setq node (treesit-node-parent node)))
     (and node (equal (treesit-node-type node) "rule_set") selectors)))
 
-(defun scss2--selector-target (selectors)
-  "Select one complete comma-separated branch of SELECTORS at point."
-  (let (groups group before selected ending)
-    (dolist (child (scss2--children selectors))
-      (cond
-       ((scss2--comment-p child))
-       ((equal (treesit-node-type child) ",")
-        (when group (push (list (nreverse group) before child) groups))
-        (setq group nil before child))
-       (t (push child group))))
-    (when group (push (list (nreverse group) before nil) groups))
-    (setq groups (nreverse groups))
-    (dolist (entry groups)
-      (let ((beg (treesit-node-start (caar entry)))
-            (end (treesit-node-end (car (last (car entry))))))
-        (cond ((and (<= beg (point)) (< (point) end)) (setq selected entry))
-              ((= end (point)) (setq ending entry)))))
-    (when-let* ((entry (or selected ending)))
-      (scss2--make-target
-       :owner selectors :beg (treesit-node-start (caar entry))
-       :end (treesit-node-end (car (last (car entry))))
-       :before (nth 1 entry) :after (nth 2 entry)
-       :count (length groups) :separator 'comma))))
+(defun scss2--map-entry-target (node)
+  "Select map entry NODE and record its direct comma neighbors.
+The map owns validation because deletion also relies on its separators."
+  (let ((map (treesit-node-parent node)) before after seen (count 0))
+    (dolist (child (scss2--children map))
+      (pcase (treesit-node-type child)
+        ("map_entry"
+         (cl-incf count)
+         (when (treesit-node-eq child node) (setq seen t)))
+        ("," (if seen
+                 (unless after (setq after child))
+               (setq before child)))))
+    (scss2--make-target :owner map :beg (treesit-node-start node)
+                        :end (treesit-node-end node) :before before :after after
+                        :count count :separator 'comma)))
 
 (defun scss2--covering-node (position)
   "Return the smallest token covering POSITION, or nil on whitespace."
@@ -123,7 +129,7 @@ whitespace between statements touches nothing."
         (unless (or (member (treesit-node-type node) scss2--statement-containers)
                     (when-let* ((body (scss2--block-bounds node)))
                       (<= (car body) (point) (cdr body)))
-                    ;; A blank line in a multi-line value or list belongs to no entity.
+                    ;; A blank line touches no token outside a string or comment.
                     (and (save-excursion (beginning-of-line) (looking-at-p "[ \t]*\r?$"))
                          (not (scss2--ancestor node (cons "string" scss2--comment-types)))))
           node))))
@@ -135,6 +141,28 @@ whitespace between statements touches nothing."
       (setq node (treesit-node-parent node)))
     node))
 
+(defun scss2--entry-at-point ()
+  "Return the entry whose tail before a direct delimiter contains point.
+Only whitespace may follow its end, up to a comma or closing parenthesis.
+A comma already passed, a comment or a nested delimiter breaks the tail."
+  (let* ((end (save-excursion (skip-chars-backward " \t\r\n\f") (point)))
+         (node (and (> end (point-min))
+                    (treesit-node-at (1- end) (scss2--language))))
+         entry)
+    (while (and node (not entry) (<= (treesit-node-end node) end))
+      (when (and (= (treesit-node-end node) end)
+                 (member (treesit-node-type node)
+                         '("map_entry" "named_argument" "parameter"))
+                 (member (treesit-node-type (treesit-node-parent node))
+                         '("map" "arguments" "parameters" "configuration")))
+        (when-let* ((next (treesit-node-next-sibling node))
+                    (_ (member (treesit-node-type next) '("," ")")))
+                    (_ (not (treesit-node-check next 'missing)))
+                    (_ (<= (point) (treesit-node-start next))))
+          (setq entry node)))
+      (setq node (treesit-node-parent node)))
+    entry))
+
 (defun scss2--block-node (node &optional branch)
   "Find the nearest structural block around NODE.
 Unless BRANCH is non-nil, an else branch selects its entire conditional."
@@ -144,67 +172,105 @@ Unless BRANCH is non-nil, an else branch selects its entire conditional."
       (treesit-node-parent node)
     node))
 
+(defun scss2--body-whitespace-block (node &optional branch)
+  "Return NODE's structural block when point is in its body whitespace.
+Whitespace inside a value, string or comment keeps that entity's owner.
+An entity's end belongs to the following gap; the closing brace belongs
+to its block, including an empty body.  With BRANCH, keep the current
+conditional branch instead of selecting the whole conditional."
+  (when (memq (char-after) '(?\s ?\t ?\n ?\r ?\f ?}))
+    (while (and node (= (point) (treesit-node-end node)))
+      (setq node (treesit-node-parent node)))
+    (when (member (treesit-node-type node) '("declaration_block" "}"))
+      (setq node (treesit-node-parent node)))
+    (when-let* ((body (scss2--block-bounds node))
+                (_ (<= (car body) (point) (cdr body))))
+      (scss2--block-node node branch))))
+
 (defun scss2--resolve-target-1 (kind)
   "Resolve entity KIND in the current tree view.
-Only explicit block selection may cross a leaf statement boundary."
+Entity commands share configured code types and complete comment groups.
+KIND may request TAB's declaration, or allow kill's if-condition
+target.  Selectors and body whitespace share block boundaries."
   (let ((node (scss2--containing-node)))
     (pcase kind
-      ('block (when-let* ((block (scss2--block-node node)))
-                (scss2--node-target block 'statement)))
       ('property (when-let* ((declaration (scss2--ancestor node scss2--declaration-types)))
                    (scss2--node-target declaration 'statement)))
       (_
-       (setq node (or (scss2--touched-node)
-                      (user-error "No stylesheet target here")))
-       (when (scss2--ancestor node scss2--comment-types)
-         (user-error "Comments can be uncommented with scss2-comment-uncomment"))
-       (if-let* ((selectors (scss2--selector-owner node)))
-           (scss2--selector-target selectors)
-         (when-let* ((statement (scss2--ancestor node scss2--statement-types)))
-           (cond
-            ((member (treesit-node-type statement) scss2--declaration-types)
-             (scss2--node-target statement 'statement))
-            ((scss2--block-bounds statement)
-             (scss2--node-target (scss2--block-node statement) 'statement))
-            (t (scss2--node-target statement 'statement)))))))))
+       (let* ((blank-block (scss2--body-whitespace-block node))
+              (touched (scss2--touched-node))
+              (comment (and (not blank-block)
+                            (scss2--ancestor touched scss2--comment-types)))
+              (selectors (scss2--selector-owner touched)))
+         (cond
+          (blank-block (scss2--node-target blank-block 'statement))
+          (comment (scss2--comment-target comment))
+          (selectors
+           (scss2--node-target (treesit-node-parent selectors) 'statement))
+          (t
+           (when-let* ((selected
+                       (scss2--ancestor (or (scss2--entry-at-point) node)
+                                        scss2-entity-node-types)))
+             (cond
+              ((equal (treesit-node-type selected) "map_entry")
+               (scss2--map-entry-target selected))
+              ((and (eq kind 'kill)
+                    (member (treesit-node-type selected) '("if_statement" "else_clause"))
+                    (treesit-node-child-by-field-name selected "condition")
+                    (when-let* ((head (scss2--value-bounds selected)))
+                      (and (<= (car head) (point)) (< (point) (cdr head))
+                           (scss2--make-target :owner selected :beg (car head)
+                                               :end (cdr head))))))
+              (t (scss2--node-target
+                  (if (equal (treesit-node-type selected) "else_clause")
+                      (treesit-node-parent selected)
+                    selected)
+                  'statement)))))))))))
 
 (defun scss2--resolve-target (&optional kind)
   "Resolve KIND in Font Lock's view and enforce accessible edit bounds."
   (scss2--check-target
    (scss2--with-font-lock-view (scss2--resolve-target-1 kind))))
 
-(defun scss2--interior (node)
-  "Return NODE's bracketed or quoted interior, using a call's argument container."
-  (let* ((children (scss2--children node))
-         (opening (cl-find-if
-                   (lambda (child)
-                     (or (member (treesit-node-type child) '("(" "[" "{" "#{" "\"" "'"))
-                         (and (equal (treesit-node-type node) "raw_group")
-                              (equal (treesit-node-text child t) "#{"))))
-                   children))
-         (closing (car (last children))))
-    (if opening
-        (when (and closing
-                   ;; A lone quote in an ERROR node is both its first and last child.
-                   (not (treesit-node-eq opening closing))
-                   (not (treesit-node-check opening 'missing))
-                   (not (treesit-node-check closing 'missing))
-                   (equal (treesit-node-type closing)
-                          (pcase (treesit-node-text opening t)
-                            ("(" ")") ("[" "]") ((and (or "\"" "'") quotation) quotation)
-                            (_ "}"))))
-          (cons (treesit-node-end opening) (treesit-node-start closing)))
-      (when-let* ((arguments (scss2--child node "arguments")))
-        (scss2--interior arguments)))))
+(defun scss2--interior (node &optional at-point)
+  "Return NODE's delimited interior, using a call's argument container.
+With AT-POINT, require the delimiters to surround point.  This also handles
+multiple direct pairs, such as the two selector parentheses in @scope."
+  (let (openings bounds)
+    (dolist (child (scss2--children node))
+      (unless (treesit-node-check child 'missing)
+        (let* ((type (if (and (equal (treesit-node-type node) "raw_group")
+                              (equal (treesit-node-text child t) "#{"))
+                         "#{"
+                       (treesit-node-type child)))
+               (expected (pcase (caar openings)
+                           ("(" ")") ("[" "]") ((or "{" "#{") "}")
+                           ((and (or "\"" "'") quotation) quotation))))
+          (cond
+           ((and openings (equal type expected))
+            (let ((opening (cdr (pop openings))))
+              (when (and (not bounds)
+                         (if at-point
+                             (<= (treesit-node-start opening) (point) (treesit-node-start child))
+                           (null openings)))
+                (setq bounds (cons (treesit-node-end opening) (treesit-node-start child))))))
+           ((member type '("(" "[" "{" "#{" "\"" "'"))
+            (push (cons type child) openings))))))
+    (or bounds
+        (when-let* ((arguments (scss2--child node "arguments")))
+          (scss2--interior arguments at-point)))))
 
 (defun scss2--value-bounds (node)
-  "Return the trimmed right-hand side of NODE's colon as (BEG . END).
-NODE is a declaration or map entry; for a value statement such as @return,
-return what follows the directive.  Exclude the direct colon, semicolon and
-nested-property block.  Include flags such as !important.  An empty value
-has equal beginning and end."
-  (let ((begin (and (equal (treesit-node-type node) "value_statement")
-                    (treesit-node-end (treesit-node-child node 0))))
+  "Return NODE's trimmed value or at-rule head as (BEG . END).
+Start after a declaration, entry or parameter colon, or an at-rule directive,
+preserving the whole @else if prefix.  Stop before the direct
+semicolon or block.  Include comments and flags such as !important.
+An empty value or head has equal beginning and end."
+  (let ((begin (and (scss2--directive node)
+                    (treesit-node-end
+                     (or (and (equal (treesit-node-type node) "else_clause")
+                              (scss2--child node "if"))
+                         (treesit-node-child node 0)))))
         end)
     (dolist (child (scss2--children node))
       (let ((type (treesit-node-type child)))
@@ -223,67 +289,70 @@ has equal beginning and end."
         (skip-chars-backward " \t\r\n" begin)
         (cons begin (point))))))
 
-(defun scss2--condition-bounds (node)
-  "Return NODE's complete condition field, including all value siblings."
-  (let ((conditions
-         (cl-loop for index below (treesit-node-child-count node)
-                  when (equal (treesit-node-field-name-for-child node index) "condition")
-                  collect (treesit-node-child node index))))
-    (when conditions
-      (cons (treesit-node-start (car conditions))
-            (treesit-node-end (car (last conditions)))))))
+(defun scss2--entry-value (node)
+  "Return NODE's map entry, named argument or parameter value bounds.
+A parameter without a default value has no bounds."
+  (when (member (treesit-node-type node) '("map_entry" "named_argument" "parameter"))
+    (scss2--value-bounds node)))
 
-(defun scss2--map-entry-value (node)
-  "Return the value bounds of map entry NODE, as for a declaration.
-For map NODE, use its entry that ends at point, before a comma or `)'."
-  (when-let* ((entry (if (equal (treesit-node-type node) "map")
-                         (cl-find (point) (scss2--children node t) :key #'treesit-node-end)
-                       node))
-              (_ (equal (treesit-node-type entry) "map_entry")))
-    (scss2--value-bounds entry)))
-
-(defun scss2--content-target (block)
-  "Resolve content at point, or the nearest structural body with BLOCK."
+(defun scss2--content-target ()
+  "Resolve the nearest editable content at point."
   (scss2--check-target
    (scss2--with-font-lock-view
-     (let* ((node (scss2--containing-node))
-            (statement (scss2--ancestor node scss2--statement-types))
-            bounds owner)
-       (if block
-           (setq owner (scss2--block-node node t)
-                 bounds (and owner (scss2--block-bounds owner)))
-         (while (and node (not bounds))
-           (cond
-            ((scss2--statement-p node)
-             (let ((body (scss2--block-bounds node)))
-               (setq owner node
-                     bounds
-                     ;; The opening brace belongs to the body.
-                     (if (and body (>= (point) (1- (car body))))
-                         body
-                       (or (scss2--condition-bounds node)
-                           (and (member (treesit-node-type node)
-                                        (cons "value_statement" scss2--declaration-types))
-                                (scss2--value-bounds node))
-                           body))))
-             ;; Unsupported leaf statements never empty their parent block.
-             (setq node nil))
-            ((scss2--comment-p node) (setq node nil))
-            ;; Inside interpolation, a call's name selects the interpolation.
-            ((and (equal (treesit-node-type (treesit-node-parent node)) "interpolation")
-                  (when-let* ((interior (scss2--interior node)))
-                    (and (eq (char-before (car interior)) ?\()
-                         (< (point) (1- (car interior))))))
-             (setq node (treesit-node-parent node)))
-            ((setq bounds (or (scss2--map-entry-value node) (scss2--interior node)))
-             ;; Errors in a block's body leave its header's content reliable.
-             (setq owner (if (and statement (not (scss2--block-bounds statement)))
-                             statement
-                           node)))
-            (t (setq node (treesit-node-parent node))))))
-       (if bounds
-           (scss2--make-target :owner owner :beg (car bounds) :end (cdr bounds))
-         (user-error "Nothing to empty here"))))))
+    (let* ((at-point (or (scss2--entry-at-point) (scss2--containing-node)))
+           (node (or (scss2--body-whitespace-block at-point t) at-point))
+           (statement (scss2--ancestor node scss2--statement-types))
+           bounds owner)
+      (while (and node (not bounds))
+        (cond
+         ((scss2--statement-p node)
+          (let* ((body (scss2--block-bounds node))
+                 (name (treesit-node-child-by-field-name node "name"))
+                 (parameters
+                  (and (or (not body)
+                           (scss2--contains-point-p name)
+                           (scss2--contains-point-p
+                            (treesit-node-child-by-field-name node "module")))
+                       (if name
+                           ;; A later clause's list does not belong to NAME.
+                           (let ((next (treesit-node-next-sibling name)))
+                             (while (scss2--comment-p next)
+                               (setq next (treesit-node-next-sibling next)))
+                             (and (member (treesit-node-type next) '("arguments" "parameters"))
+                                  next))
+                         (scss2--child node "arguments")))))
+            (if (and parameters (setq bounds (scss2--interior parameters)))
+                (setq owner (if body parameters node))
+              (setq owner node
+                    bounds
+                    (cond
+                     ;; Direct header parentheses can share a statement
+                     ;; with its body, without a separate container node.
+                     ((scss2--directive node)
+                      (or (scss2--interior node t) body
+                          (when-let* ((head (scss2--value-bounds node))
+                                      (_ (< (car head) (cdr head))))
+                            head)))
+                     ((and body (>= (point) (1- (car body)))) body)
+                     (t (or (scss2--value-bounds node) body))))))
+          ;; A leaf without content keeps looking for an enclosing body.
+          (unless bounds (setq node (treesit-node-parent node))))
+         ((scss2--comment-p node) (setq node nil))
+         ;; Inside interpolation, a call's name selects the interpolation.
+         ((and (equal (treesit-node-type (treesit-node-parent node)) "interpolation")
+               (when-let* ((interior (scss2--interior node)))
+                 (and (eq (char-before (car interior)) ?\()
+                      (< (point) (1- (car interior))))))
+          (setq node (treesit-node-parent node)))
+         ((setq bounds (or (scss2--entry-value node) (scss2--interior node)))
+          ;; Errors in a block's body leave its header's content reliable.
+          (setq owner (if (and statement (not (scss2--block-bounds statement)))
+                          statement
+                        node)))
+         (t (setq node (treesit-node-parent node)))))
+      (if bounds
+          (scss2--make-target :owner owner :beg (car bounds) :end (cdr bounds))
+        (user-error "Nothing to empty here"))))))
 
 (defun scss2--declaration-tab-target ()
   "Return where TAB moves within the declaration at point, or nil.
@@ -379,14 +448,25 @@ move to the next snippet field, or indent with `indent-for-tab-command'."
 (defun scss2--deletion-ranges (target)
   "Return TARGET's deletion ranges, preserving comments around its comma."
   (let ((begin (scss2--target-beg target)) (end (scss2--target-end target))
+        (owner (scss2--target-owner target))
         (after (scss2--target-after target)) (before (scss2--target-before target)))
-    (when (eql (scss2--target-count target) 1)
-      (user-error "This is the rule's only selector; use C-u to select its block"))
     (when-let* ((comma (or after before)))
       (unless (<= (point-min) (treesit-node-start comma)
                   (treesit-node-end comma) (point-max))
         (user-error "The adjacent comma is outside the accessible buffer")))
     (cond
+     ;; An empty @at-root query is omitted; unlike a value, it cannot be ().
+     ((and (equal (treesit-node-type owner) "map")
+           (eql (scss2--target-count target) 1)
+           (equal (treesit-node-type (treesit-node-parent owner)) "at_root_statement"))
+      (cons (cons begin end)
+            (mapcar
+             (lambda (token)
+               (unless (<= (point-min) (treesit-node-start token)
+                           (treesit-node-end token) (point-max))
+                 (user-error "The map delimiter is outside the accessible buffer"))
+               (cons (treesit-node-start token) (treesit-node-end token)))
+             (delq nil (list (scss2--child owner "(") after (scss2--child owner ")"))))))
      (after
       (let ((beg (treesit-node-start after)) (finish (treesit-node-end after)))
         (if (scss2--whitespace-p end beg)
@@ -436,22 +516,37 @@ Lines are judged in Font Lock's view; the result stays accessible."
       (unless (string-empty-p text) (kill-new text)))))
 
 ;;;###autoload
-(defun scss2-kill (&optional block)
-  "Kill a selector branch, declaration, leaf statement or complete block.
-With prefix BLOCK, kill the nearest complete structural block instead."
-  (interactive "P")
-  (scss2--kill-target (scss2--resolve-target (and block 'block))))
+(defun scss2-kill ()
+  "Kill the code entity selected by `scss2-entity-node-types', or a comment.
+On a selector, always kill its complete rule, including the selector
+list and block body.  In a block body's inter-statement whitespace,
+kill that complete block.  Both ignore the configured node types.
+Consecutive standalone // comment lines are killed together.
+Inside a map entry, kill the key/value pair and an adjacent comma, keeping
+surrounding comments.  An empty map retains (); an empty @at-root query
+also loses its parentheses.
+In an @if or @else if condition, kill that condition, keeping the directive
+and body.  The @else if prefix stays together.  A map entry remains a nearer
+entity.  Other at-rule headers, directives and opening braces select the
+complete statement or block."
+  (interactive)
+  (scss2--kill-target (scss2--resolve-target 'kill)))
 
 ;;;###autoload
-(defun scss2-empty (&optional block)
-  "Kill the nearest delimited interior, declaration value or if condition.
+(defun scss2-empty ()
+  "Kill the nearest delimited interior, named value or block body.
 Brackets, interpolation and string quotes delimit interiors.  A map entry
-empties its value as a declaration does, and @return, @debug, @warn and
-@error empty the value that follows them.  On a rule or at-rule header
-outside its condition, or in a block's blank space, kill the block's body.
-With prefix BLOCK, clear the nearest structural block's body."
-  (interactive "P")
-  (let ((target (scss2--content-target block)))
+or named argument empties its value as a declaration does.  A parameter
+with a default empties that value.  Function names select their associated
+argument or parameter list; a blockless directive can also select that list.
+Otherwise, walk upward until an editable interior, value or body is found.
+An at-rule keyword selects its body.  A parenthesized condition selects the
+parentheses; a condition without a nearer content target selects the body.
+A leaf without content continues to its enclosing block.  Comments stop
+the search.  A blockless at-rule with no nearer content target clears its
+nonempty head, keeping the directive and semicolon."
+  (interactive)
+  (let ((target (scss2--content-target)))
     (scss2--transaction
       (let ((text (buffer-substring-no-properties
                    (scss2--target-beg target) (scss2--target-end target))))
@@ -460,12 +555,11 @@ With prefix BLOCK, clear the nearest structural block's body."
         (unless (string-empty-p text) (kill-new text))))))
 
 ;;;###autoload
-(defun scss2-copy (&optional block)
-  "Copy the same entity as `scss2-kill', preserving point and mark.
-Briefly highlight what was copied.  With prefix BLOCK, copy the nearest
-complete structural block."
-  (interactive "P")
-  (let ((target (scss2--resolve-target (and block 'block))))
+(defun scss2-copy ()
+  "Copy the configured entity, preserving point and mark.
+Copy consecutive standalone // lines together and highlight what was copied."
+  (interactive)
+  (let ((target (scss2--resolve-target)))
     (scss2--transaction
       (kill-new (buffer-substring-no-properties
                  (scss2--target-beg target) (scss2--target-end target))))
@@ -481,7 +575,7 @@ complete structural block."
       position)))
 
 (defun scss2--comma-separator (target)
-  "Return the comma and following whitespace that join TARGET's branches."
+  "Return the comma and following whitespace that join TARGET's map entries."
   (if-let* ((comma (or (scss2--target-before target) (scss2--target-after target))))
       (save-excursion
         (scss2--with-font-lock-view
@@ -491,12 +585,13 @@ complete structural block."
     ", "))
 
 ;;;###autoload
-(defun scss2-duplicate (&optional block)
+(defun scss2-duplicate ()
   "Duplicate the entity, preserving its body text and the kill ring.
-Briefly highlight the copy.  With prefix BLOCK, duplicate the nearest
-complete structural block."
-  (interactive "P")
-  (let* ((target (scss2--resolve-target (and block 'block)))
+Consecutive standalone // comment lines are duplicated together; line
+comments get a new line rather than a statement separator.
+Briefly highlight the copy."
+  (interactive)
+  (let* ((target (scss2--resolve-target))
          (text (buffer-substring-no-properties
                 (scss2--target-beg target) (scss2--target-end target))))
     (scss2--transaction
@@ -505,11 +600,13 @@ complete structural block."
        (if (eq (scss2--target-separator target) 'comma)
            (scss2--comma-separator target)
          (concat
-          (when (and (not (string-suffix-p ";" text))
+          (when (and (eq (scss2--target-separator target) 'statement)
+                     (not (string-suffix-p ";" text))
                      (not (scss2--block-bounds (scss2--target-owner target)))) ";")
-          (if (scss2--whole-lines (cons (scss2--target-beg target)
-                                        (scss2--end-of-trailing-comment
-                                         (scss2--target-end target))))
+          (if (or (equal (treesit-node-type (scss2--target-owner target)) "inline_comment")
+                  (scss2--whole-lines (cons (scss2--target-beg target)
+                                            (scss2--end-of-trailing-comment
+                                             (scss2--target-end target)))))
               (concat
                (save-excursion
                  (end-of-line)
@@ -524,12 +621,14 @@ complete structural block."
       (pulse-momentary-highlight-region (- (point) (length text)) (point)))))
 
 ;;;###autoload
-(defun scss2-mark (&optional block)
-  "Select the entity; repeated calls keep the same selection.
-With prefix BLOCK, select the nearest complete structural block."
-  (interactive "P")
-  (unless (and (not block) (eq last-command 'scss2-mark) (region-active-p))
-    (let ((target (scss2--resolve-target (and block 'block))))
+(defun scss2-mark ()
+  "Select the nearest map entry or entity using the shared code boundaries.
+On a selector or in body whitespace, select the complete rule or block.
+Repeated calls keep the same selection.
+Consecutive standalone // comment lines are selected together."
+  (interactive)
+  (unless (and (eq last-command 'scss2-mark) (region-active-p))
+    (let ((target (scss2--resolve-target)))
       (goto-char (scss2--target-beg target))
       (push-mark (scss2--target-end target) t)
       (activate-mark))))
@@ -557,58 +656,54 @@ With prefix BLOCK, select the nearest complete structural block."
                         :end (treesit-node-end last))))
 
 ;; Uncommenting removes padding at a range's edge along with its markers.
-(defun scss2--comment-range (block)
+(defun scss2--comment-range ()
   "Return (BEGIN END LINE-COMMENT) for commenting the entity at point.
-With BLOCK, use the nearest complete structural block.  Separator
-whitespace stays outside the range; LINE-COMMENT selects // markers."
-  (let* ((target (scss2--resolve-target (and block 'block)))
-         (begin (apply #'min (mapcar #'car (scss2--deletion-ranges target))))
-         (end (max (scss2--target-end target)
-                   (if-let* ((comma (scss2--target-after target)))
-                       (treesit-node-end comma) 0)))
-         ;; Inline // would also hide the following selector or declaration.
+Separator whitespace stays outside the range; LINE-COMMENT selects // markers."
+  (let* ((target (scss2--resolve-target))
+         (ranges (scss2--deletion-ranges target))
+         (begin (apply #'min (mapcar #'car ranges)))
+         (end (save-excursion
+                (goto-char (apply #'max (mapcar #'cdr ranges)))
+                (skip-chars-backward " \t" begin)
+                (point)))
+         ;; Inline // would also hide code after the target.
          (line-comment (and (eq scss2-dialect 'scss)
                             (not (eq (scss2--target-separator target) 'comma))
                             (scss2--whole-lines (cons begin end))
                             t)))
     (when line-comment
+      ;; Give the native command every line's full indentation.
+      (setq begin (save-excursion (goto-char begin) (line-beginning-position)))
       ;; At CRLF's CR, newcomment otherwise inserts an extra LF.
-      (setq end (save-excursion (goto-char end) (skip-chars-forward " \t\r") (point)))
-      ;; Plain style puts later lines' markers in column 0, so put the first's there too.
-      (save-excursion
-        (goto-char begin)
-        (when (< (line-end-position) end) (setq begin (line-beginning-position)))))
+      (setq end (save-excursion (goto-char end) (skip-chars-forward " \t\r") (point))))
     (list begin end line-comment)))
 
-(defun scss2--uncomment-range (comment group)
-  "Return (BEGIN END LINE-COMMENT) for uncommenting COMMENT.
-With GROUP, include its run of adjacent standalone // lines."
+(defun scss2--uncomment-range (comment)
+  "Return (BEGIN END LINE-COMMENT) for COMMENT's complete comment group."
   (let ((target (scss2--check-target
                  (scss2--with-font-lock-view
-                   (if group (scss2--comment-target comment) (scss2--node-target comment))))))
+                   (scss2--comment-target comment)))))
     (list (scss2--target-beg target) (scss2--target-end target)
           (equal (treesit-node-type comment) "inline_comment"))))
 
 ;;;###autoload
-(defun scss2-comment-uncomment (&optional block)
-  "Comment the same entity as `scss2-kill', or uncomment the comment at point.
-Uncomment one // line at a time.  With prefix BLOCK, uncomment a // line's
-whole run of adjacent standalone // lines, or comment the nearest complete
-structural block."
-  (interactive "P")
+(defun scss2-comment-uncomment ()
+  "Comment code selected by `scss2-entity-node-types', or uncomment at point.
+Uncomment a whole run of consecutive standalone // lines, or one block
+or trailing comment.  Use Emacs's indented line-comment style to align //
+markers at the region's minimum indentation."
+  (interactive)
   (let ((comment (scss2--with-font-lock-view
                    (scss2--ancestor (scss2--touched-node) scss2--comment-types))))
     (pcase-let ((`(,begin ,end ,line-comment)
                  (if comment
-                     (scss2--uncomment-range comment block)
-                   (scss2--comment-range block))))
+                     (scss2--uncomment-range comment)
+                   (scss2--comment-range))))
       (scss2--transaction
         (let ((comment-start (if line-comment "// " "/* "))
               (comment-end (if line-comment "" " */"))
-              ;; Keep a block's // lines one run for a prefixed uncomment.
               (comment-empty-lines t)
-              ;; Plain style leaves blank lines' whitespace for an exact uncomment.
-              (comment-style (if line-comment 'plain 'multi-line)))
+              (comment-style (if line-comment 'indent 'multi-line)))
           (if comment (uncomment-region begin end) (comment-region begin end)))))))
 
 ;;;###autoload

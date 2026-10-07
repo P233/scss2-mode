@@ -653,28 +653,77 @@ The dialect parser cache, transactional guards, direct local module support and
 specialized identifier semantics serve current contracts. Dispatch is explicit,
 and the core and semantic suites run independently. Structural entity commands
 select complete declarations and other statements, including leaf at-rules such
-as `@include foo;`, and top-level selector branches. Value atoms, arguments,
-parameters and map entries are not independent targets. Explicit
-prefix selection resolves the nearest structural block; an else branch's entity
-is the complete conditional chain. Empty independently resolves bracket,
-interpolation and string interiors, complete declaration values (including
-flags), map entry values, the values of @return, @debug, @warn and @error,
-and all siblings of an if condition field. A call's
-name selects its arguments, except directly inside interpolation, where it
-selects the interpolation. Its output can be intentionally incomplete.
+as `@include foo;`, complete rules, map key/value pairs and comment groups.
+Value atoms, arguments and parameters are not independent entities. All five
+commands ascend from the containing node to the nearest configured type,
+including through whitespace in values and between statements. Map targets
+record direct comma neighbors and use the map as their validation owner.
+Entity and content selection share `scss2--entry-at-point`: an entry's end and
+its trailing whitespace before a direct comma or closing parenthesis belong
+to that entry. It checks the entry's parent and adjacent delimiter, without
+crossing comments or passed commas. Completed nested values select their outer
+entry; positions inside those values retain the nearer content target.
+Kill reuses the comment-preserving separator deletion ranges; the last entry
+leaves `()`, except that an empty `@at-root` query also loses its parentheses.
+Comment spans those deletion ranges, including the required commas or query
+parentheses, with separator whitespace outside its markers.
 
-Selector deletion removes an adjacent comma without consuming intervening
-comments. Commenting wraps the branch and its comma together so the remaining
-selector stays valid, using block comments for inline targets and standalone
-line comments for SCSS lines. Uncommenting restores one `//` line; with a
-prefix it restores the run of adjacent standalone `//` lines, which blank lines
-end. Grouping by default would also restore an unrelated `//` comment adjacent
+Kill in an `@if` or `@else if` condition selects the entire condition after the
+directive and before the opening brace. The shared value-range helper provides
+its bounds, preserving the whole `@else if` prefix. A nearer map entry or comment
+still selects itself. On the directive or opening brace, kill selects the complete
+conditional chain. All other at-rule headers select the complete statement or
+block, including function and mixin names and parameters. Removing a required
+condition intentionally leaves unfinished syntax.
+An else branch's entity is the complete conditional chain. Prefix arguments
+are ignored; point determines the target for every structural command.
+
+Empty independently walks ancestors for bracket, interpolation and string
+interiors, declaration and map entry values, named argument values, parameter
+defaults, and block bodies. Map entries, `named_argument` and `parameter` nodes
+share the colon-to-value-end range; a parameter without a default keeps walking
+upward. Selection starts from the shared entry-tail target when present;
+otherwise it walks from the containing node. Nested interiors remain nearer
+targets while point is inside them.
+There is no per-at-rule dispatch. A statement's `name` or `module` field selects its
+direct `arguments` or `parameters` container. Without a body, its directive
+also uses that container. Inside a header, nearer interiors win; a bare
+condition continues to its statement's body. Direct delimiter pairs are matched
+around point, including headers such as `@scope` with multiple parentheses and
+no separate container nodes. Each conditional branch keeps its own body.
+Without a nearer interior or body, a leaf at-rule uses the shared nonempty
+head range, preserving its directive and semicolon. Leaf at-rules without
+content continue to their enclosing block, while comments stop the search.
+For a header interior with a separate node, that node owns validation; unrelated
+body errors do not invalidate its range. A leaf statement remains the validation
+owner of its interiors. Directly inside interpolation, a function name selects
+the interpolation. Empty's output can be intentionally incomplete when clearing
+a required value.
+
+Kill, copy, duplicate, mark and comment use `scss2-entity-node-types` through one
+entity resolver. All five commands on a selector select its owning rule,
+and in inter-statement body whitespace they select the nearest complete
+structural block, regardless of configured node types. Selector branches are
+not entities. Elsewhere, commands share the configured ancestor lookup, with
+only kill selecting an if condition separately.
+TAB's declaration lookup, Empty's content ranges and Avy's navigation container
+retain their separate purposes. Block comments serve inline targets and CSS;
+standalone SCSS lines use line comments.
+
+Kill, copy, duplicate, mark and uncomment share the same comment range:
+consecutive standalone `//` lines form a group, which blank lines end.
+Block comments and trailing comments stand alone. No previous-operation
+state is stored. Grouping also restores a handwritten `//` note adjacent
 to commented code. When commenting a block, blank lines also receive `//` so a
-prefixed uncomment restores the whole block. Line comments preserve original
-blank-line whitespace and CRLF endings, and a multi-line comment puts all of its
-markers in column 0. Emacs's comment machinery quotes and
-restores nested block comment delimiters. Duplicate preserves body text and
-CRLF; repeated mark keeps its existing selection. Input errors and inaccessible
+normal uncomment restores the whole block. The command delegates to Emacs's
+`comment-region` and `uncomment-region`, using `indent` for line comments and
+`multi-line` for block comments. Line-comment ranges include the first line's
+indentation and the final CR in literal CRLF text. Native region alignment
+places all `//` markers at the minimum indentation and can pad blank lines or
+adjust tabs; undo restores the exact original text. Emacs's comment machinery
+also quotes and restores nested block comment delimiters. Duplicate preserves body text and
+CRLF and adds no statement separator to comments; even a trailing `//` copy
+gets its own line. Repeated mark keeps its existing selection. Input errors and inaccessible
 ranges are rejected before mutation, and transactions roll back failed edits.
 
 Avy is loaded only by its command. Its bounds come from the nearest complete

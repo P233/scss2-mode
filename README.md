@@ -81,23 +81,87 @@ TAB runs `scss2-tab` in both modes. The other commands have no default bindings;
 
 | Command | Action |
 | --- | --- |
-| `scss2-kill` | Kill a selector branch, complete declaration, leaf statement such as `@include foo;`, or at-rule block |
-| `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration, map entry or `@return`-style value, or `@if` condition |
-| `scss2-copy` | Copy the same entity as kill, briefly highlighting it |
-| `scss2-comment-uncomment` | Comment the entity, or uncomment the comment at point (one `//` line at a time) |
-| `scss2-duplicate` | Duplicate the entity with its comma or statement separator, briefly highlighting the copy |
-| `scss2-mark` | Select the entity; repeated calls keep the selection |
+| `scss2-kill` | Kill the nearest entity, or an `@if` / `@else if` condition |
+| `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration / map entry / named argument value, parameter default, or at-rule body |
+| `scss2-copy` | Copy the configured entity, briefly highlighting it |
+| `scss2-comment-uncomment` | Comment the nearest map entry, declaration, statement or complete rule, or uncomment the comment group at point |
+| `scss2-duplicate` | Duplicate the entity with its comma, statement separator or comment line break, briefly highlighting the copy |
+| `scss2-mark` | Select the nearest entity or map key/value pair; repeated calls keep the selection |
 | `scss2-avy-word` | Jump to a word inside the invocation's complete rule or at-rule block |
 | `scss2-expand` | Expand a declaration abbreviation |
 
-`C-u` selects the nearest complete structural block for kill, copy, comment,
-duplicate and mark, including its header and any `@else` branches. For empty,
-`C-u` clears only the nearest block's body (the current conditional branch).
-On a `//` comment, `C-u` uncomments its whole run of adjacent `//` lines, such
-as a block commented with `C-u`.
+Structural commands ignore prefix arguments such as `C-u`; point determines
+the target. To select a whole block, move to its selector, at-rule keyword or
+body whitespace. Conditional entities include all `@else` branches, while
+empty clears only the current branch's body.
 A declaration includes its complete multiline value, flags and terminator;
-arguments, parameters and map entries are not separate entities; empty clears
-a map entry's value.
+arguments and parameters are not separate entities. Entity commands select a
+map's complete key/value pair; empty clears that pair's value. Kill also removes
+an adjacent comma and preserves comments outside the pair. Removing the last
+entry leaves `()`; an empty `@at-root` query also loses its parentheses.
+Comment includes the required separators so the remaining map stays valid.
+At a map entry's end, whitespace up to its next comma or closing `)` still
+belongs to that entry: `a: 1│,` and `a: 1 │,` select the same pair. After the
+comma (`a: 1,│`), the surrounding container applies again. This rule also
+selects named argument values and parameter defaults for empty. It never
+crosses a comment; inside a value, nearer strings and calls keep priority.
+
+Empty walks upward from point to the nearest editable interior, value or block
+body. Function and mixin names select their associated parameter or argument list, so both
+`@function rhythm(...)` and `@mixin rhythm(...)` clear `()` from `rhythm`.
+On a parameter name with a default, only its value is cleared:
+`@mixin func($value: 1, $other: 2) {}` becomes
+`@mixin func($value: , $other: 2) {}` from `$value`. Named arguments in calls,
+`@include`, and module configuration (`with (...)`) follow the same rule.
+The name, colon, commas and other arguments remain. A parameter without a
+default continues upward to the surrounding parameter list.
+Inside a header, parentheses, strings and nested calls keep their own interiors.
+With no nearer target, the search reaches the `{}` body: `@if ($a > 0)` clears
+the parentheses from its condition, while `@if $a > 0` clears the body.
+On the at-rule keyword, empty clears its body; for `@if` and `@else if`, only
+the current branch is cleared. A blockless directive can select its argument
+list, so `@include foo(1);` becomes `@include foo();` from its keyword or name.
+Without a nearer interior or a body, empty clears a nonempty at-rule head:
+`@use "sass:math";` becomes `@use ;` from its keyword. Inside the string, only
+the quoted contents are cleared. A leaf with no content, such as `@content;`,
+continues to its enclosing block. If no target exists, empty reports that
+there is nothing to empty.
+
+Kill inside an `@if` or `@else if` condition removes that entire condition,
+preserving the directive and block: `@if $x > 0 { ... }` becomes
+`@if  { ... }` from `$x`. The `@else if` prefix stays together. Map entries
+and comments remain nearer entities. On the directive or opening brace, kill
+selects the complete conditional chain. Other at-rule headers select their
+complete block or statement, including function and mixin names and parameters.
+
+Comments are entities for kill, copy, duplicate and mark. Consecutive `//`
+comments alone on their lines form one group; a blank line ends it. Trailing
+comments and `/* ... */` comments stand alone. All five entity commands use the
+same comment group, so commenting a multiline block and invoking the command
+again restores the whole block. An adjacent handwritten `//` note also belongs
+to that group; separate it with a blank line to keep it commented.
+SCSS uses Emacs's native `comment-region` with the `indent` style: `//` markers
+align at the region's minimum indentation, with relative code indentation
+after the markers. Blank lines also receive a marker. Whitespace follows
+Emacs's standard rules, which can pad short blank lines or adjust tabs;
+undo restores the exact original text.
+
+[`scss2-entity-node-types`](#structural-node-selection) controls code selection
+for kill, copy, duplicate, mark and comment. By default, point in a declaration selects the declaration,
+and point in a selector or at-rule header selects the complete rule or block
+(with the if-condition exception for kill described above).
+All five entity commands on a selector always target its complete rule,
+including the selector list and block body, regardless of this option.
+Individual selector branches are not entities. In whitespace between statements
+inside `{}`, all five target the nearest complete enclosing rule or block.
+All five entity commands walk from point to the nearest configured ancestor,
+including map entries by default. In body whitespace they find the enclosing
+rule or at-rule; inside value whitespace they find the enclosing pair or declaration.
+Existing comments are always selected as comment groups. Empty resolves the
+entity's internal contents and Avy resolves its navigation container separately.
+The whitespace immediately after a child's closing brace belongs to its parent,
+A cursor on the closing brace still belongs
+to the child. Uncomment may still select the comment immediately before point.
 
 Avy is optional: install [Avy](https://github.com/abo-abo/avy) to use
 `scss2-avy-word`. Its range is the nearest complete rule or at-rule at invocation,
@@ -112,16 +176,12 @@ Candidates stay in the invoking window; label display follows Avy's usual behavi
   (keymap-set css2-mode-map "C-c e" #'scss2-expand))
 ```
 
-Entity commands require point on an entity, including whitespace inside it.
-Blank space between statements and blank lines inside a value select nothing;
-use `C-u` to select a containing rule explicitly.
-Selector branches include nested pseudo-class selectors. Killing or commenting
-the only branch is rejected: select the whole rule with `C-u`. Comments between
-a killed branch and its comma remain in place. Empty stops at a comment or at
-a leaf statement it does not clear, such as `@extend` or `@include` outside
-its arguments, and reports that there is nothing to empty instead of clearing
-the enclosing block; blank space in a block clears its body. Empty can
-intentionally leave an unfinished value or condition. Each mutation is one undo step; incomplete
+Blank lines between top-level statements select nothing.
+Empty stops at a comment and reports that there is nothing to empty.
+A rule's selector,
+an opening brace or blank space in a block clears its body. Empty can
+intentionally leave an unfinished value; killing an if condition leaves that
+condition unfinished. Each mutation is one undo step; incomplete
 input boundaries are rejected, and a failed edit restores text, point, selection
 and the kill ring. See the [structural edge cases](docs/architecture.md#decisions-and-known-limits).
 
@@ -136,8 +196,42 @@ and the kill ring. See the [structural edge cases](docs/architecture.md#decision
 | `CC` (environment) | `cc` | Compiler command, split like a shell command: `ccache cc` and `cc -m64` work; quote a path containing spaces |
 | `scss2-indent-offset` | `2` | Indentation width |
 | `scss2-fontify-colors` | `t` | Show hex colors, color names and literal `rgb()`/`hsl()` on their own color; set it before opening buffers |
+| `scss2-entity-node-types` | Map entries, declarations, rules and at-rule statements | Shared node selection for kill, copy, duplicate, mark and comment; see below |
 
 Idle-released data is rebuilt on next use, so returning to a large file can take longer.
+
+### Structural node selection
+
+Use `M-x customize-variable RET scss2-entity-node-types RET` to inspect, edit
+and save the node list, or find it under `M-x customize-group RET scss2 RET`.
+The same option applies to both `scss2-mode` and `css2-mode`.
+
+Kill, copy, duplicate, mark and comment share this one list; there are no
+per-command lists. Empty and Avy use their built-in content and navigation
+rules, have no configurable node lists, and are unaffected by this setting.
+
+Entries are Tree-sitter node type strings, such as `"map_entry"`,
+`"property_declaration"`, `"variable_declaration"`, `"rule_set"`,
+`"function_definition"` and `"mixin_definition"`. Starting at point, commands
+walk upward to the nearest matching node. List order does not give a type
+higher priority. Adding a type changes selection, not syntax or separator
+handling for that type.
+
+For example, to stop selecting individual map entries and instead reach their
+enclosing declaration with the remaining defaults:
+
+```elisp
+(with-eval-after-load 'scss2-edit
+  (setq scss2-entity-node-types
+        (remove "map_entry" scss2-entity-node-types)))
+```
+
+This changes all five entity commands together. Selectors still select their
+complete rule, inter-statement body whitespace selects the enclosing block,
+and existing comments select their comment group, regardless of the list.
+Uncomment detection is unchanged. When the selected node is `@if` or `@else if`
+and point is in its condition, kill removes only the condition; the other four
+commands select the whole conditional chain.
 
 ## Frontends
 
