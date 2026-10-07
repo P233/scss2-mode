@@ -530,17 +530,30 @@ This also works before the parser can recognize an incomplete declaration."
         (skip-chars-forward " \t\r\n" end))
       (min (point) end))))
 
+(defun scss2--literal-string (node)
+  "Return NODE's decoded string value, or nil for interpolation or errors."
+  (when (and node (not (treesit-node-check node 'has-error))
+             (not (treesit-search-subtree node "interpolation")))
+    (mapconcat
+     (lambda (child)
+       (let ((text (treesit-node-text child t)))
+         (if (equal (treesit-node-type child) "escape_sequence")
+             (if (memq (aref text 1) '(?\r ?\n ?\f)) ""
+               (scss2--decode-identifier text))
+           text)))
+     (scss2--children node t) "")))
+
 (defun scss2--module-namespaces ()
   "Return (NAMESPACE . SOURCE) for every literal @use in this buffer.
-NAMESPACE is decoded.  A later @use of the same namespace comes first."
+Both names and source strings are decoded.
+A later @use of the same namespace comes first."
   (let (modules)
     (dolist (capture (treesit-query-capture (scss2--root-node)
                                           (scss2--query '((use_statement) @use))))
       (let* ((node (cdr capture))
              (string (scss2--child node "string"))
              (alias (treesit-node-child-by-field-name node "alias"))
-             (source (and string
-                          (string-trim (treesit-node-text string t) "[\"']" "[\"']"))))
+             (source (scss2--literal-string string)))
         (when source
           (push (cons (if alias
                           (scss2--identifier-name alias)

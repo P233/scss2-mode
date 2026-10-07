@@ -804,6 +804,28 @@
       (let ((scss2-completion--media nil))
         (should (eq (plist-get (scss2-context-at-point) :role) 'media-feature))))))
 
+(ert-deftest scss2-completion-module-urls-decode-string-escapes ()
+  (let ((directory (make-temp-file "scss2-module-url-" t)))
+    (unwind-protect
+        (progn
+          (dolist (name '("theme" "the'me"))
+            (with-temp-file (expand-file-name (concat "_" name ".scss") directory)
+              (insert "$tone: red;")))
+          (dolist (url '("'theme'" "'th\\65 me'" "\"th\\000065me\""
+                         "'t\\heme'" "'th\\65\tme'" "'th\\65\nme'"
+                         "'th\\\neme'" "'th\\\reme'" "'th\\\feme'"))
+            (dolist (alias '("" " as theme"))
+              (scss2-completion-test--with 'scss
+                  (format "@use %s%s; .a { color: theme.$to|; }" url alias)
+                (setq buffer-file-name (expand-file-name "main.scss" directory))
+                (should-not (treesit-node-check (scss2--root-node) 'has-error))
+                (should (member "$tone" (scss2-completion-test--names))))))
+          (scss2-completion-test--with 'scss "@use 'the\\'me' as theme; .a { color: theme.$to|; }"
+            (setq buffer-file-name (expand-file-name "main.scss" directory))
+            (should-not (treesit-node-check (scss2--root-node) 'has-error))
+            (should (member "$tone" (scss2-completion-test--names)))))
+      (delete-directory directory t))))
+
 (ert-deftest scss2-completion-module-identities-decode-escapes ()
   (let ((directory (make-temp-file "scss2-module-identity-" t)))
     (unwind-protect
