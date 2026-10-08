@@ -4,6 +4,19 @@
 (require 'ert)
 (require 'scss2-mode)
 
+(ert-deftest scss2-performance-module-export-names-are-read-once ()
+  (with-temp-buffer
+    (dotimes (i 100) (insert (format "$token%d: red;\n" i)))
+    (insert "$-private: red; .nested { $inside: red; } @mixin paint() {}")
+    (scss2-mode)
+    (let ((read-name (symbol-function 'scss2--identifier-text)) (calls 0) names)
+      (cl-letf (((symbol-function 'scss2--identifier-text)
+                 (lambda (node) (cl-incf calls) (funcall read-name node))))
+        (setq names (scss2-completion--exports (scss2--root-node) '("variable_declaration"))))
+      (should (equal names (cl-loop for i downfrom 99 to 0 collect (format "$token%d" i))))
+      ;; Inspect only top-level variable declarations, without rereading public names.
+      (should (= calls 101)))))
+
 (ert-deftest scss2-performance-emmet-probe-and-live-table-share-context ()
   (dolist (mode '(css2-mode scss2-mode))
     (with-temp-buffer

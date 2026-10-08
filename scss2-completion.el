@@ -189,7 +189,8 @@ server.  This intentionally does not retain a second project index."
                   candidates))))
 
 (defun scss2-completion--public-definitions (root types)
-  "Return public top-level definitions in ROOT matching TYPES, last first."
+  "Return (NODE . SPELLING) for ROOT's public top-level definitions of TYPES.
+The last definition comes first."
   (let (definitions)
     ;; Stop at direct children and materialize only matching definitions.
     (dolist (entry (cdr (treesit-induce-sparse-tree
@@ -197,14 +198,12 @@ server.  This intentionally does not retain a second project index."
       (when-let* ((text (scss2--identifier-text
                          (treesit-node-child-by-field-name (car entry) "name")))
                   (_ (not (string-match-p "\\`\\$?[-_]" (scss2--decode-identifier text)))))
-        (push (car entry) definitions)))
+        (push (cons (car entry) text) definitions)))
     definitions))
 
 (defun scss2-completion--exports (root types)
   "Return public top-level names in ROOT matching TYPES."
-  (mapcar (lambda (definition)
-            (scss2--identifier-text (treesit-node-child-by-field-name definition "name")))
-          (scss2-completion--public-definitions root types)))
+  (mapcar #'cdr (scss2-completion--public-definitions root types)))
 
 (defun scss2-completion--module-names (module types)
   "Return public top-level Sass names in local MODULE matching TYPES."
@@ -360,22 +359,22 @@ Sass loads `_name.scss' and `name.scss' as `name', so offer that name too."
          (mapcar (lambda (name) (cons name documentation)) names)))
       ('argument
        (let* ((name (scss2-completion--sass-name (or (plist-get context :mixin) "")))
-              (named-p (lambda (node)
-                         (when-let* ((text (scss2--identifier-text
-                                            (treesit-node-child-by-field-name node "name"))))
-                           (equal name (scss2-completion--sass-name text)))))
+              (named-p (lambda (text) (and text (equal name (scss2-completion--sass-name text)))))
               (arguments
                (if module
                    (scss2-completion--in-module
                     module (lambda (root)
                              (when-let* ((definition (cl-find-if named-p (scss2-completion--public-definitions
-                                                                           root '("mixin_definition")))))
-                               (scss2-completion--named-arguments definition))))
+                                                                           root '("mixin_definition"))
+                                                                 :key #'cdr)))
+                               (scss2-completion--named-arguments (car definition)))))
                  ;; Visible definitions arrive in source order.  The last one
                  ;; before point is the innermost, latest static binding.
                  (when-let* ((definition
-                              (cl-find-if (lambda (node) (and (< (treesit-node-start node) (point))
-                                                              (funcall named-p node)))
+                              (cl-find-if (lambda (node)
+                                            (and (< (treesit-node-start node) (point))
+                                                 (funcall named-p (scss2--identifier-text
+                                                                   (treesit-node-child-by-field-name node "name")))))
                                           (reverse (scss2-completion--definitions '("mixin_definition"))))))
                    (scss2-completion--named-arguments definition)))))
          (append arguments (scss2-completion--values nil))))
