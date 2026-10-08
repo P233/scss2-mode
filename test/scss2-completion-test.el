@@ -1328,6 +1328,25 @@
         (should-not (member "inherit" names))
         (should-not (member "var()" names))))))
 
+(ert-deftest scss2-completion-descriptor-and-property-values-stay-distinct ()
+  ;; Exercise the dependency's data through the host, including positive
+  ;; controls: a missing table must not pass the descriptor exclusions.
+  (dolist (dialect '(css scss))
+    (scss2-completion-test--with dialect "@font-face { font-weight: bo|; }"
+      (let ((names (scss2-completion-test--names)))
+        (should (member "bold" names))
+        (should-not (member "bolder" names))))
+    (scss2-completion-test--with dialect ".a { font-weight: bo|; }"
+      (let ((names (scss2-completion-test--names)))
+        (should (member "bold" names))
+        (should (member "bolder" names))))
+    (scss2-completion-test--with dialect "@font-face { font-family: se|; }"
+      (should-not (member "serif" (scss2-completion-test--names))))
+    (scss2-completion-test--with dialect ".a { font-family: se|; }"
+      (should (member "serif" (scss2-completion-test--names))))
+    (scss2-completion-test--with dialect "@font-face { fwbr| }"
+      (should-not (member "font-weight: bolder;" (scss2-completion-test--expansions))))))
+
 (defmacro scss2-completion-test--with-module (source &rest body)
   "Evaluate BODY at | in SOURCE beside a local `_theme.scss' module."
   (declare (indent 1) (debug t))

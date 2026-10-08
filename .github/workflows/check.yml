@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: P233/emmet2-mode
-          ref: 66ce92a56aa8738a30774062af8c12a48edda7e0
+          ref: 132872f8bf44a52e12a007904cab25613abdd1d1
           path: .dependencies/emmet2-mode
       - uses: actions/checkout@v7
         with:
