@@ -9,7 +9,8 @@
 ;; SCSS2_BENCH_PROFILE: also report one separately instrumented run.
 ;;
 ;; Compare separate Emacs processes using the same fixture root and compiler.
-;; JSON Lines include all samples, medians, and a hash of every final face span.
+;; Each workload runs with scss2-fontify-details both nil and t.  JSON Lines
+;; record that option, all samples, medians, and a hash of every final face span.
 ;; Medians follow warmups and do not establish cold query-compilation cost.
 ;; Mode setup includes reading/compiling queries and syntax initialization.
 ;; Parsing is forced before full fontification.  Incremental measurements edit
@@ -72,9 +73,10 @@
                                       (line-end-position))))))
     (list update fontify)))
 
-(defun scss2-benchmark--run (name source)
-  (let (parse setup full incremental-update incremental-fontify
-              key-update key-fontify digest stats)
+(defun scss2-benchmark--run (name source details)
+  (let ((scss2-fontify-details details)
+        parse setup full incremental-update incremental-fontify
+        key-update key-fontify digest stats)
     (dotimes (run (+ scss2-benchmark--warmups scss2-benchmark--runs))
       (garbage-collect)
       (let ((gc-cons-threshold most-positive-fixnum)
@@ -113,8 +115,10 @@
                   (when (>= run scss2-benchmark--warmups)
                     (push (car elapsed) incremental-update)
                     (push (cadr elapsed) incremental-fontify)))
-                (unless (eq (get-text-property position 'face) 'font-lock-number-face)
-                  (error "Edited number lost its face")))
+                (let ((expected (and details 'font-lock-number-face)))
+                  (unless (eq (get-text-property position 'face) expected)
+                    (error "Edited number face: expected %S, got %S"
+                           expected (get-text-property position 'face)))))
               (when-let* ((keys (treesit-query-capture
                                  (scss2--root-node)
                                  '((map_entry key: (plain_value) @key)) nil nil t))
@@ -153,6 +157,7 @@
           (elp-restore-all) (kill-buffer buffer))))
     (princ (json-encode
             (list :sample name :bytes (string-bytes source)
+                  :fontify_details (if details t :json-false)
                   :input_sha256 (secure-hash 'sha256 source) :face_sha256 digest
                   :parse_ms (scss2-benchmark--median parse)
                   :mode_setup_ms (scss2-benchmark--median setup)
@@ -168,12 +173,17 @@
                   :profile (vconcat stats))))
     (terpri)))
 
+(defun scss2-benchmark--sample (name source)
+  "Measure NAME's SOURCE in both compact and detailed highlighting modes."
+  (dolist (details '(nil t))
+    (scss2-benchmark--run name source details)))
+
 (unwind-protect
     (progn
       (unless (> scss2-benchmark--runs 0)
         (error "SCSS2_BENCH_RUNS must be positive"))
       (scss2-grammar-ensure 'scss)
-            (princ (json-encode
+      (princ (json-encode
               (list :emacs emacs-version
                     :grammar scss2-grammar-directory
                     :source scss2-benchmark--root
@@ -183,6 +193,7 @@
                     :warmups scss2-benchmark--warmups
                     :gc "before each run, disabled during phases"
                     :native_trampolines :json-false :css_color_previews :json-false
+                    :fontify_details [:json-false t]
                     :scss2_compilation
                     (if (byte-code-function-p (symbol-function 'scss2--root-node))
                         "bytecode" "source"))))
@@ -193,17 +204,17 @@
                         (insert-file-contents
                          (expand-file-name (cadr sample) scss2-benchmark--fixtures))
                         (buffer-string))))
-          (scss2-benchmark--run
+          (scss2-benchmark--sample
            (car sample) (mapconcat #'identity (make-list (nth 2 sample) source) "\n"))))
-      (scss2-benchmark--run
+      (scss2-benchmark--sample
        "deep-query"
        (concat "@media " (make-string 512 ?\() "width > 1px"
                (make-string 512 ?\)) " { .a { color: red; } }\n"))
-      (scss2-benchmark--run
+      (scss2-benchmark--sample
        "wide-query"
        (concat "@media (width " (apply #'concat (make-list 4096 "/**/ "))
                "> 1px) { .a { color: red; } }\n"))
-      (scss2-benchmark--run
+      (scss2-benchmark--sample
        "numbers-heavy"
        (concat
         (mapconcat

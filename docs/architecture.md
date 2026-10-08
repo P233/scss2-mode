@@ -346,7 +346,8 @@ settings. Candidate counts, parser counts and face hashes must agree before
 timing is compared. A repeatable material regression requires investigation; a
 cache is not the default remedy. `scripts/benchmark-emacs.el` measures mode
 setup, parsing and full and incremental fontification per workload; compare
-separate processes on the same fixtures.
+separate processes on the same fixtures. Each workload runs with
+`scss2-fontify-details` off and on; compare face hashes only within one setting.
 
 ## Narrowing and the shared parser
 
