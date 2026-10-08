@@ -37,7 +37,7 @@ results are never retained.")
   "Idle timer for releasing resources in invisible stylesheet buffers.")
 
 (defcustom scss2-idle-release-delay 30
-  "Idle seconds before releasing invisible buffers' trees and highlighting.
+  "Idle seconds before buffers in no window release trees and highlighting.
 The next syntax or fontification request rebuilds them automatically.
 Buffers displayed in any frame, active completion sessions, and buffers
 sharing text through indirect buffers keep their resources.
@@ -79,7 +79,7 @@ Reparses at this tick only empty the tree or rebuild it over unchanged text.")
   "Earliest position that a reparse changed since syntax was propertized.")
 
 ;; INTERIM (since 2026-10-03, until treesit.el hands every reparse's changed ranges
-;; to redisplay, upstream draft 09): see "Changed ranges of early reparses" in
+;; to redisplay): see "Changed ranges of early reparses" in
 ;; docs/architecture.md.
 (defun scss2--mark-changed-ranges (ranges parser)
   "Mark RANGES that PARSER's reparse changed for refontification and syntax.

@@ -23,7 +23,7 @@
 (defvar avy-all-windows-alt)
 
 (defcustom scss2-entity-node-types (cons "map_entry" (copy-sequence scss2--statement-types))
-  "Code node types shared by kill, copy, duplicate, mark and comment.
+  "Tree-sitter node types shared by kill, copy, duplicate, mark and comment.
 By default, a map entry, declaration or leaf statement selects itself.
 A rule or at-rule header selects its complete block.  Conditional branches
 select the whole conditional.  On a selector or in a block body's
@@ -31,7 +31,7 @@ inter-statement whitespace, all entity commands select the complete
 enclosing rule or block, regardless of this option.
 Existing comments always select their complete comment group.
 All entity commands ascend from point to the nearest matching ancestor.
-Kill in an if condition selects that condition, preserving the directive.
+In an `@if' or `@else if' condition, kill selects only the condition.
 Empty resolves internal contents and Avy resolves navigation separately."
   :type '(repeat string)
   :group 'scss2)
@@ -723,8 +723,8 @@ Separator whitespace stays outside the range; LINE-COMMENT selects // markers."
 (defun scss2-comment-uncomment ()
   "Comment code selected by `scss2-entity-node-types', or uncomment at point.
 Uncomment a whole run of consecutive standalone // lines, or one block
-or trailing comment.  Use Emacs's indented line-comment style to align //
-markers at the region's minimum indentation."
+or trailing comment.  Line comments use Emacs's `indent' comment style,
+which aligns // markers at the region's minimum indentation."
   (interactive)
   (let ((comment (scss2--with-font-lock-view
                    (scss2--ancestor (scss2--touched-node) scss2--comment-types))))
@@ -766,9 +766,8 @@ Point after a container's closing delimiter belongs to its parent."
   "Jump to a word in the nearest complete multiline container.
 Containers include rule, at-rule and nested property blocks, maps, lists
 and module configurations.  Single-line containers continue upward.
-The invocation fixes the full range,
-including headers and delimiters; other windows are not searched.
-Requires the optional Avy package."
+The invocation fixes the full range, including headers and delimiters;
+other windows are not searched.  Requires the optional Avy package."
   (interactive)
   (unless (require 'avy nil t) (user-error "Install Avy to use scss2-avy-word"))
   (let ((target

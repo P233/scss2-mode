@@ -2,13 +2,14 @@
 ;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;;; Commentary:
-;; CSS uses the same editor modules as SCSS with literal CSS semantics.
+;; css2-mode uses scss2-mode's modules with the parser's CSS entry, where
+;; Sass syntax such as `#{' in strings stays literal.
 ;;; Code:
 (require 'scss2)
 
 ;;;###autoload
 (define-derived-mode css2-mode prog-mode "CSS[ts]"
-  "Edit CSS with semantic completion, structural edits and Emmet2."
+  "Edit CSS with semantic completion, structural edits and Emmet."
   :syntax-table nil
   (scss2--setup 'css))
 

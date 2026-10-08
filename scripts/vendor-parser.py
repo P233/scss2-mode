@@ -50,7 +50,7 @@ def verify(release=False):
 def update(source):
     source = source.resolve()
     # Read everything before replacing any file. The manifest identifies actual
-    # bytes, including authorized source changes not yet represented by a commit.
+    # bytes, including uncommitted source changes.
     contents = {name: (source / name).read_bytes() for name in FILES}
     hashes = {name: digest(data) for name, data in contents.items()}
     metadata = json.loads((source / "package.json").read_text())
@@ -77,8 +77,8 @@ def update(source):
                 VENDOR.rename(previous)
             incoming.rename(VENDOR)
         finally:
-            # Cancellation must restore the previous snapshot before the
-            # temporary directory is cleaned, just like a filesystem error.
+            # Cancellation, like a filesystem error, must restore the previous
+            # snapshot before the temporary directory is cleaned.
             if previous.exists() and not VENDOR.exists():
                 previous.rename(VENDOR)
     verify()

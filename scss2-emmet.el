@@ -5,7 +5,7 @@
 
 ;;; Commentary:
 ;; The stylesheet dispatcher decides where abbreviations are meaningful.
-;; Emmet2 owns live choices, previews and atomic insertion, which adds no
+;; emmet2-mode owns live choices, previews and atomic insertion, which adds no
 ;; snippet fields to CSS.  This host owns value navigation.
 
 ;;; Code:
@@ -19,8 +19,9 @@
 Completion tables never retain this binding; later revisions analyze afresh.")
 
 (defcustom scss2-enable-emmet t
-  "Offer declaration abbreviations through the required Emmet2 dependency.
-Set nil to retain semantic completion without abbreviation candidates."
+  "Whether to offer emmet2-mode declaration abbreviations.
+When nil, completion offers no abbreviation candidates and `scss2-expand'
+signals an error; semantic completion is unchanged."
   :type 'boolean :group 'scss2)
 
 (defun scss2-emmet-setup ()
@@ -66,7 +67,7 @@ the host only confirms a declaration insertion position."
 
 ;;;###autoload
 (defun scss2-expand ()
-  "Expand a declaration abbreviation using Emmet2.
+  "Expand a declaration abbreviation using emmet2-mode.
 Only declaration insertion positions are accepted.  Values, selectors and
 directives are completed by the semantic stylesheet completion provider."
   (interactive)

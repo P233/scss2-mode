@@ -1,23 +1,23 @@
 # scss2-mode
 
-Edit CSS and SCSS in Emacs with syntax highlighting, context-aware completion, structural editing, and [emmet2-mode](https://github.com/P233/emmet2-mode) abbreviations. One package provides both **`scss2-mode` and `css2-mode`**.
+Major modes for editing CSS and SCSS in Emacs, with Tree-sitter highlighting, context-aware completion, structural editing and [emmet2-mode](https://github.com/P233/emmet2-mode) abbreviations. One package provides `scss2-mode` and `css2-mode`.
 
-**The bundled parser is [P233/tree-sitter-scss](https://github.com/P233/tree-sitter-scss), an independent, unofficial grammar.** It is not affiliated with, or interchangeable with, [tree-sitter-grammars/tree-sitter-scss](https://github.com/tree-sitter-grammars/tree-sitter-scss), and you do not install a grammar separately.
+The bundled parser is [tree-sitter-scss](https://github.com/P233/tree-sitter-scss), an independent grammar that is not interchangeable with the [official grammar](https://github.com/tree-sitter-grammars/tree-sitter-scss). Emacs compiles it on first use, so there is no grammar to install.
 
-Parsing and highlighting target complete CSS/SCSS files. A statement being typed usually stays one local error, so the rules after it keep their colors and structural commands; the unfinished construct itself is best effort and refuses structural edits until it is repaired.
+Parsing targets complete files, and error recovery is deliberately narrow. A statement being typed usually stays one local error, so the rules after it keep their highlighting and structural commands; the unfinished statement refuses structural edits until it is repaired.
 
 ## Requirements
 
-- **Emacs 31.1+**, built with Tree-sitter support.
-- **A C compiler** available to Emacs (`cc`, or the `CC` environment variable).
-- **emmet2-mode 2.0.0**, installed as a dependency. It is unreleased: use its `main` branch at or after the commit pinned in [`.github/workflows/check.yml`](.github/workflows/check.yml). Older emmet2-mode packages are incompatible.
-- **Python 3 and Git** to build the local package archive, when not installing with straight.el.
+- Emacs 31.1 or later, built with Tree-sitter support.
+- A C compiler available to Emacs (`cc`, or the `CC` environment variable).
+- emmet2-mode 2.0.0 or later, installed as a dependency; the 0.2 series is incompatible.
+- Python 3 and Git, only to build a local package archive without straight.el.
 
 CI runs on Linux and macOS. Indented Sass (`.sass`) is not supported.
 
 ## Install
 
-With straight.el and use-package, declare emmet2-mode first so straight knows its recipe; **you do not enable `emmet2-mode` yourself**:
+With straight.el and use-package, declare emmet2-mode first so straight knows its recipe. You need not enable `emmet2-mode`; scss2-mode calls it directly:
 
 ```elisp
 (use-package emmet2-mode
@@ -28,14 +28,14 @@ With straight.el and use-package, declare emmet2-mode first so straight knows it
                         :files (:defaults "vendor")))
 ```
 
-Without straight.el, build one local archive from your scss2-mode checkout containing both packages (add `--emacs /path/to/emacs` if `emacs` is not on `PATH`):
+Without straight.el, build one local archive containing both packages from your scss2-mode checkout (add `--emacs /path/to/emacs` if `emacs` is not on `PATH`):
 
 ```sh
 python3 scripts/package.py --output-dir dist/local-archive \
   --emmet-source /path/to/emmet2-mode
 ```
 
-Then add the archive and install scss2-mode; **Emacs installs emmet2-mode automatically**, and you do not enable `emmet2-mode` yourself:
+Then add the archive and install scss2-mode. Emacs installs emmet2-mode as a dependency. You need not enable `emmet2-mode`; scss2-mode calls it directly:
 
 ```elisp
 (require 'package)
@@ -55,19 +55,17 @@ Open a `.scss` or `.css` file and Emacs selects the matching mode. If your confi
 (add-to-list 'major-mode-remap-alist '(scss-mode . scss2-mode))
 ```
 
-The parser ships as C source. On first use, Emacs compiles it into a native library in `scss2-grammar-cache-directory`; there is no build command to run, Tree-sitter CLI, download, Node, or background service. Later sessions reuse the library; changed parser sources or another platform build a new one, while an update to the highlighting queries alone does not.
+The parser ships as C source. On first use, Emacs compiles it into a native library in `scss2-grammar-cache-directory`; you run no build command and need no Tree-sitter CLI, download, Node or background service. Later sessions reuse the library. Changed parser sources or another platform build a new one; an update to the highlighting queries alone does not.
 
-A buffer larger than `treesit-max-buffer-size`, or a parser that cannot be built or loaded (for example, without a C compiler), shows a warning and keeps the dialect's syntax, comment commands, indentation and comment and string highlighting; your mode hooks still run.
+A buffer larger than `treesit-max-buffer-size`, or a parser that cannot be built or loaded (for example, without a C compiler), shows a warning and keeps the dialect's syntax, comment commands, indentation, and comment and string highlighting; your mode hooks still run.
 
 ## Everyday editing
 
-- **Expand declarations:** inside `.card { }`, type `m10` and run `M-x scss2-expand` to get `margin: 10px;`. Bracket values may contain blanks (`p[1px 2px]`, `w[calc(100% - 2rem)]`); SCSS also accepts `p$gutter` and `p$a$b$c`. Completion offers these expansions as Emmet candidates.
-- **Complete at point** with `M-x completion-at-point` or a [frontend](#frontends); `M-x emmet2-complete` requests Emmet candidates only. Completion covers at-rules, property values, CSS functions, pseudo-selectors, media queries, local import paths, and custom properties in `var()`; SCSS adds visible variables, functions, mixins, named arguments, and members of local `@use` modules. Property names come only from Emmet expansion; class, ID, and tag names, and ordinary text in comments and strings, are not completed.
-- **Fuzzy matching:** `display: ib` offers `inline-block`. The `scss2` style, the default for the `scss2` completion category, also decodes CSS escapes and treats Sass `_` and `-` alike.
-- **Indent and move through declarations and maps with TAB:** before a nonempty line's first nonblank character, TAB indents the line and moves to that character. In a property or variable name, or a Sass map key, TAB reindents the current line and jumps to the first character of its value. Multiline maps follow the same sequence: leading whitespace → key → value, including nested maps. Correct indentation leaves the text unchanged; an active region or an inaccessible line beginning skips reindentation. Inside the value, including nested functions, strings, URLs, and snippet fields, TAB jumps past the declaration's `;`. These actions close an open completion menu without accepting it. Blank lines keep their usual snippet or indentation behavior. Elsewhere, or without a value or an accessible `;`, TAB keeps its usual behavior.
-- **No `css-mode` underneath:** the modes neither load nor run Emacs's `css-mode`. They supply their own comment syntax, comment filling, color previews and indentation, which nests by `scss2-indent-offset`, follows a block's existing indentation, and indents continued values and selectors as Prettier does; EditorConfig's `indent_size` sets `scss2-indent-offset`, and `css-indent-offset` is not read. `derived-mode-p` still matches `css-mode` in both modes and `scss-mode` in `scss2-mode`, but those modes' hooks and key bindings do not apply; use `scss2-mode-hook`, `css2-mode-hook` and their maps. Highlighting uses Font Lock faces, plus `scss2-selector` and `scss2-property`, so themes own the palette.
+Inside `.card { }`, type `m10` and run `M-x scss2-expand` to get `margin: 10px;`. Bracket values may contain blanks (`p[1px 2px]`, `w[calc(100% - 2rem)]`); SCSS also accepts `p$gutter` and `p$a$b$c`. Completion offers the same expansions as Emmet candidates.
 
-To match with your own styles, override the category. Your styles then match raw spellings, so escaped queries such as `i\62` and Sass `_`/`-` equivalence find nothing:
+Complete at point with `M-x completion-at-point` or a [frontend](#frontends); `M-x emmet2-complete` requests Emmet candidates only. Completion covers at-rules, property values, CSS functions, pseudo-selectors, media queries, local import paths, and custom properties in `var()`; SCSS adds visible variables, functions, mixins, named arguments, and members of local `@use` modules. Property names come only from Emmet expansion; class, ID, and tag names, and ordinary text in comments and strings, are not completed.
+
+Matching is fuzzy: `display: ib` offers `inline-block`. The `scss2` completion style, the default for the `scss2` completion category, also decodes CSS escapes and treats Sass `_` and `-` alike. To match with your own styles, override the category. Your styles then match raw spellings, so escaped queries such as `i\62` and queries relying on Sass `_`/`-` equivalence find nothing:
 
 ```elisp
 (add-to-list 'completion-category-overrides '(scss2 (styles basic partial-completion)))
@@ -75,107 +73,13 @@ To match with your own styles, override the category. Your styles then match raw
 
 In a narrowed buffer, completion and commands read the whole syntax tree, as Font Lock does, but act only inside the restriction ([details](docs/architecture.md#narrowing-and-the-shared-parser)).
 
+TAB indents and moves through declarations and maps. Before a nonempty line's first nonblank character, TAB indents the line and moves to that character. In a property or variable name, or a Sass map key, TAB reindents the current line and jumps to the first character of its value. Multiline maps, including nested ones, follow the same sequence: leading whitespace, then key, then value. Inside the value, including nested functions, strings, URLs, and snippet fields, TAB jumps past the declaration's `;`. Correct indentation leaves the text unchanged; an active region or an inaccessible line beginning skips reindentation. These actions close an open completion menu without accepting it. Elsewhere, including blank lines between statements, or without a value or an accessible `;`, TAB keeps its usual snippet or indentation behavior.
+
+The modes neither load nor run Emacs's `css-mode`. They supply their own comment syntax, comment filling, color previews and indentation. Indentation nests by `scss2-indent-offset`, follows a block's existing indentation, and indents continued values and selectors as Prettier does; EditorConfig's `indent_size` sets `scss2-indent-offset`, and `css-indent-offset` is not read. `derived-mode-p` still matches `css-mode` in both modes and `scss-mode` in `scss2-mode`, but those modes' hooks and key bindings do not apply; use `scss2-mode-hook`, `css2-mode-hook` and their maps. Highlighting uses Font Lock faces plus `scss2-selector` and `scss2-property`, so themes own the palette.
+
 ### Structural commands
 
-TAB runs `scss2-tab` in both modes. The other commands have no default bindings; run them with `M-x` or bind them in `scss2-mode-map` and `css2-mode-map`.
-
-| Command | Action |
-| --- | --- |
-| `scss2-kill` | Kill the nearest entity, or an `@if` / `@else if` condition |
-| `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration / map entry / named argument value, parameter default, or at-rule body |
-| `scss2-copy` | Copy the configured entity, briefly highlighting it |
-| `scss2-comment-uncomment` | Comment the nearest map entry, declaration, statement or complete rule, or uncomment the comment group at point |
-| `scss2-duplicate` | Duplicate the entity with its comma, statement separator or comment line break, briefly highlighting the copy |
-| `scss2-mark` | Select the nearest entity or map key/value pair; repeated calls keep the selection |
-| `scss2-avy-word` | Jump to a word inside the nearest complete multiline container |
-| `scss2-expand` | Expand a declaration abbreviation |
-
-Structural commands ignore prefix arguments such as `C-u`; point determines
-the target. To select a whole block, move to its selector, at-rule keyword or
-body whitespace. Conditional entities include all `@else` branches, while
-empty clears only the current branch's body.
-A declaration includes its complete multiline value, flags and terminator;
-arguments and parameters are not separate entities. Entity commands select a
-map's complete key/value pair; empty clears that pair's value. Kill also removes
-an adjacent comma and preserves comments outside the pair. Removing the last
-entry leaves `()`; an empty `@at-root` query also loses its parentheses.
-Comment includes the required separators so the remaining map stays valid.
-At a map entry's end, whitespace up to its next comma or closing `)` still
-belongs to that entry: `a: 1│,` and `a: 1 │,` select the same pair. After the
-comma (`a: 1,│`), the surrounding container applies again. This rule also
-selects named argument values and parameter defaults for empty. It never
-crosses a comment; inside a value, nearer strings and calls keep priority.
-
-Empty walks upward from point to the nearest editable interior, value or block
-body. Function and mixin names select their associated parameter or argument list, so both
-`@function rhythm(...)` and `@mixin rhythm(...)` clear `()` from `rhythm`.
-On a parameter name with a default, only its value is cleared:
-`@mixin func($value: 1, $other: 2) {}` becomes
-`@mixin func($value: , $other: 2) {}` from `$value`. Named arguments in calls,
-`@include`, and module configuration (`with (...)`) follow the same rule.
-The name, colon, commas and other arguments remain. A parameter without a
-default continues upward to the surrounding parameter list.
-Inside a header, parentheses, strings and nested calls keep their own interiors.
-With no nearer target, the search reaches the `{}` body: `@if ($a > 0)` clears
-the parentheses from its condition, while `@if $a > 0` clears the body.
-On the at-rule keyword, empty clears its body; for `@if` and `@else if`, only
-the current branch is cleared. A blockless directive can select its argument
-list, so `@include foo(1);` becomes `@include foo();` from its keyword or name.
-Without a nearer interior or a body, empty clears a nonempty at-rule head:
-`@use "sass:math";` becomes `@use ;` from its keyword. Inside the string, only
-the quoted contents are cleared. A leaf with no content, such as `@content;`,
-continues to its enclosing block. If no target exists, empty reports that
-there is nothing to empty.
-
-Kill inside an `@if` or `@else if` condition removes that entire condition,
-preserving the directive and block: `@if $x > 0 { ... }` becomes
-`@if  { ... }` from `$x`. The `@else if` prefix stays together. Map entries
-and comments remain nearer entities. On the directive or opening brace, kill
-selects the complete conditional chain. Other at-rule headers select their
-complete block or statement, including function and mixin names and parameters.
-
-Comments are entities for kill, copy, duplicate and mark. Consecutive `//`
-comments alone on their lines form one group; a blank line ends it. Trailing
-comments and `/* ... */` comments stand alone. All five entity commands use the
-same comment group, so commenting a multiline block and invoking the command
-again restores the whole block. An adjacent handwritten `//` note also belongs
-to that group; separate it with a blank line to keep it commented.
-SCSS uses Emacs's native `comment-region` with the `indent` style: `//` markers
-align at the region's minimum indentation, with relative code indentation
-after the markers. Blank lines also receive a marker. Whitespace follows
-Emacs's standard rules, which can pad short blank lines or adjust tabs;
-undo restores the exact original text.
-
-[`scss2-entity-node-types`](#structural-node-selection) controls code selection
-for kill, copy, duplicate, mark and comment. By default, point in a declaration selects the declaration,
-and point in a selector or at-rule header selects the complete rule or block
-(with the if-condition exception for kill described above).
-All five entity commands on a selector always target its complete rule,
-including the selector list and block body, regardless of this option.
-Individual selector branches are not entities. In whitespace between statements
-inside `{}`, all five target the nearest complete enclosing rule or block.
-All five entity commands walk from point to the nearest configured ancestor,
-including map entries by default. In body whitespace they find the enclosing
-rule or at-rule; inside value whitespace they find the enclosing pair or declaration.
-Existing comments are always selected as comment groups. Empty resolves the
-entity's internal contents and Avy resolves its navigation container separately.
-The whitespace immediately after a child's closing brace belongs to its parent,
-including for Avy. A cursor on the closing brace still belongs
-to the child. Uncomment may still select the comment immediately before point.
-
-Avy is optional: install [Avy](https://github.com/abo-abo/avy) to use
-`scss2-avy-word`. From point, it finds the nearest complete multiline container:
-a rule, at-rule or nested property block, map, parenthesized or bracketed list,
-or module configuration (`with (...)`). Arguments and parameters continue upward
-to a qualifying container, such as their complete function or mixin block.
-Single-line containers are skipped in favor of an enclosing multiline container;
-if none exists, the command reports no target. Ordinary declarations, individual
-map entries, strings, comments and raw value groups are not navigation containers.
-The full container, including its header or delimiters, fixes the range at
-invocation. Conditional blocks include the whole `@if`/`@else` chain. The closing
-delimiter belongs to its container; point immediately after it belongs to the
-parent. The range is independent of the visible window range.
-Candidates stay in the invoking window; label display follows Avy's usual behavior.
+TAB runs `scss2-tab` in both modes. The other commands have no default bindings; run them with `M-x` or bind them in `scss2-mode-map` and `css2-mode-map`:
 
 ```elisp
 (with-eval-after-load 'scss2-mode
@@ -184,49 +88,63 @@ Candidates stay in the invoking window; label display follows Avy's usual behavi
   (keymap-set css2-mode-map "C-c e" #'scss2-expand))
 ```
 
-Blank lines between top-level statements select nothing.
-Empty stops at a comment and reports that there is nothing to empty.
-A rule's selector,
-an opening brace or blank space in a block clears its body. Empty can
-intentionally leave an unfinished value; killing an if condition leaves that
-condition unfinished. Each mutation is one undo step; incomplete
-input boundaries are rejected, and a failed edit restores text, point, selection
-and the kill ring. See the [structural edge cases](docs/architecture.md#decisions-and-known-limits).
+| Command | Action |
+| --- | --- |
+| `scss2-kill` | Kill the nearest entity, or an `@if` / `@else if` condition |
+| `scss2-empty` | Clear the nearest `()` / `[]` / `{}` / `#{}` interior, string contents, declaration / map entry / named argument value, parameter default, or at-rule body |
+| `scss2-copy` | Copy the nearest entity, briefly highlighting it |
+| `scss2-comment-uncomment` | Comment the nearest map entry, declaration, statement or complete rule, or uncomment the comment group at point |
+| `scss2-duplicate` | Duplicate the entity with its comma, statement separator or comment line break, briefly highlighting the copy |
+| `scss2-mark` | Select the nearest entity or map key/value pair; repeated calls keep the selection |
+| `scss2-avy-word` | Jump to a word inside the nearest complete multiline container |
+| `scss2-expand` | Expand a declaration abbreviation |
+
+Point alone determines the target; the commands ignore prefix arguments such as `C-u`. Each edit is one undo step. Commands refuse a target whose boundaries depend on unfinished syntax, and a failed edit restores text, point, selection and the kill ring. Empty can intentionally leave an unfinished value, and killing an `@if` condition leaves that condition unfinished ([details](docs/architecture.md#structural-targets)).
+
+Kill, copy, duplicate, mark and comment are the entity commands. They walk up from point to the nearest node type in [`scss2-entity-node-types`](#structural-node-selection), which includes map entries by default; inside value whitespace they find the enclosing pair or declaration. With the defaults, point in a declaration selects the declaration with its complete multiline value, flags and terminator, and point in an at-rule header selects the complete block or statement. Arguments and parameters are not separate entities. Empty and Avy use their own rules, described below.
+
+Some targets do not depend on that option. On a selector, the entity commands select its complete rule, including the selector list and block body; individual selector branches are not entities. In whitespace between statements inside `{}`, they select the nearest complete enclosing rule or block. To select a whole block, move to its selector, at-rule keyword or body whitespace. The whitespace right after a child's closing brace belongs to the parent, also for Avy, while point on the closing brace belongs to the child. Blank lines between top-level statements select nothing. A conditional's entity includes all its `@else` branches.
+
+In a map, the entity commands select a complete key/value pair. At an entry's end, whitespace up to the next comma or closing `)` still belongs to that entry: `a: 1│,` and `a: 1 │,` select the same pair, and after the comma (`a: 1,│`) the surrounding container applies again. This rule never crosses a comment, nearer strings and calls inside a value keep priority, and empty applies it to named argument values and parameter defaults as well. Kill also removes an adjacent comma and keeps comments outside the pair; removing the last entry leaves `()`, and an empty `@at-root` query also loses its parentheses. Comment includes the required separators so the remaining map stays valid. Empty clears the pair's value.
+
+Kill inside an `@if` or `@else if` condition removes the whole condition and keeps the directive and block: from `$x`, `@if $x > 0 { ... }` becomes `@if  { ... }`. The `@else if` prefix stays together, and map entries and comments remain nearer entities. On the directive or opening brace, kill selects the complete conditional chain. Other at-rule headers select their complete block or statement, including function and mixin names and parameters.
+
+Existing comments are entities for kill, copy, duplicate and mark, and comment uncomments them. Consecutive `//` comments alone on their lines form one group, which a blank line ends; trailing comments and `/* ... */` comments stand alone. All five entity commands use the same group, so commenting a multiline block and invoking the command again restores the whole block. An adjacent handwritten `//` note also joins that group; separate it with a blank line to keep it commented. Uncomment may also select the comment immediately before point.
+
+SCSS line comments use Emacs's native `comment-region` with the `indent` style: `//` markers align at the region's minimum indentation, code keeps its relative indentation after the markers, and blank lines also receive a marker. Emacs's standard whitespace rules can pad short blank lines or adjust tabs; undo restores the exact original text.
+
+Empty walks upward from point to the nearest editable interior, value or block body. Function and mixin names select their parameter or argument list, so `@function rhythm(...)` and `@mixin rhythm(...)` both clear `()` from `rhythm`. On a parameter name with a default, only the value is cleared: from `$value`, `@mixin func($value: 1, $other: 2) {}` becomes `@mixin func($value: , $other: 2) {}`. Named arguments in calls, `@include` and module configuration (`with (...)`) follow the same rule; the name, colon, commas and other arguments remain. A parameter without a default continues upward to the surrounding parameter list.
+
+Inside a header, parentheses, strings and nested calls keep their own interiors. With no nearer target, the search reaches the `{}` body: `@if ($a > 0)` clears the parentheses of its condition, while `@if $a > 0` clears the body. A rule's selector, an opening brace, blank space in a block and an at-rule keyword also clear the body; for `@if` and `@else if`, only the current branch's body is cleared. A blockless directive can select its argument list, so `@include foo(1);` becomes `@include foo();` from its keyword or name. Without a nearer interior or body, empty clears a nonempty at-rule head: from its keyword, `@use "sass:math";` becomes `@use ;`, while inside the string only the quoted contents are cleared. A leaf with no content, such as `@content;`, continues to its enclosing block. Empty stops at a comment, and wherever it finds no target it reports that there is nothing to empty.
+
+`scss2-avy-word` needs [Avy](https://github.com/abo-abo/avy), which is optional. From point, it finds the nearest complete multiline container: a rule, at-rule or nested property block, a map, a parenthesized or bracketed list, or a module configuration (`with (...)`). Arguments and parameters continue upward to a qualifying container, such as their complete function or mixin block, and single-line containers give way to an enclosing multiline one; if none exists, the command reports no target. Ordinary declarations, individual map entries, strings, comments and raw value groups are not navigation containers.
+
+The full container, including its header or delimiters, fixes the range at invocation; the visible part of the window does not limit it. Conditional blocks include the whole `@if`/`@else` chain. The closing delimiter belongs to its container; point immediately after it belongs to the parent. Candidates stay in the invoking window, and label display follows Avy's usual behavior.
 
 ## Settings
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `scss2-enable-emmet` | `t` | `nil` disables abbreviations and keeps semantic completion |
-| `scss2-fontify-details` | `nil` | `t` also highlights numbers, commas, and member dots, which many themes, including Emacs's default, show plain; `nil` saves about 15% of highlighting memory. Units and operators are always highlighted, and brackets, `:`, and `;` never; set it before opening buffers |
+| `scss2-fontify-details` | `nil` | `t` also highlights numbers, type brackets, and delimiters such as commas and member dots, which many themes, including Emacs's default, show plain; `nil` stores fewer highlighting intervals. Units and operators are always highlighted, and `;`, `:`, and other brackets never; set it before opening buffers |
 | `scss2-idle-release-delay` | `30` | Idle seconds before buffers shown in no window release their syntax trees and highlighting, keeping text and undo; `nil` keeps everything |
 | `scss2-grammar-cache-directory` | `tree-sitter/scss2-mode/` in `user-emacs-directory` | Where the compiled parser is stored |
 | `CC` (environment) | `cc` | Compiler command, split like a shell command: `ccache cc` and `cc -m64` work; quote a path containing spaces |
 | `scss2-indent-offset` | `2` | Indentation width |
-| `scss2-fontify-colors` | `t` | Show hex colors, color names and literal `rgb()`/`hsl()` on their own color; set it before opening buffers |
+| `scss2-fontify-colors` | `t` | Show hex colors, color names and literal `rgb()`/`hsl()` calls with that color as background; set it before opening buffers |
 | `scss2-entity-node-types` | Map entries, declarations, rules and at-rule statements | Shared node selection for kill, copy, duplicate, mark and comment; see below |
 
 Idle-released data is rebuilt on next use, so returning to a large file can take longer.
 
 ### Structural node selection
 
-Use `M-x customize-variable RET scss2-entity-node-types RET` to inspect, edit
-and save the node list, or find it under `M-x customize-group RET scss2 RET`.
-The same option applies to both `scss2-mode` and `css2-mode`.
+Use `M-x customize-variable RET scss2-entity-node-types RET` to inspect, edit and save the node list, or find it under `M-x customize-group RET scss2 RET`. The option applies to both `scss2-mode` and `css2-mode`.
 
-Kill, copy, duplicate, mark and comment share this one list; there are no
-per-command lists. Empty and Avy use their built-in content and navigation
-rules, have no configurable node lists, and are unaffected by this setting.
+Kill, copy, duplicate, mark and comment share this one list; there are no per-command lists. Empty and Avy use their built-in content and navigation rules and ignore it.
 
-Entries are Tree-sitter node type strings, such as `"map_entry"`,
-`"property_declaration"`, `"variable_declaration"`, `"rule_set"`,
-`"function_definition"` and `"mixin_definition"`. Starting at point, commands
-walk upward to the nearest matching node. List order does not give a type
-higher priority. Adding a type changes selection, not syntax or separator
-handling for that type.
+Entries are Tree-sitter node type strings, such as `"map_entry"`, `"property_declaration"`, `"variable_declaration"`, `"rule_set"`, `"function_definition"` and `"mixin_definition"`. Starting at point, commands walk upward to the nearest matching node; list order gives no type priority. Adding a type changes selection, not syntax or separator handling for that type.
 
-For example, to stop selecting individual map entries and instead reach their
-enclosing declaration with the remaining defaults:
+For example, to stop selecting individual map entries and reach their enclosing declaration instead, keeping the other defaults:
 
 ```elisp
 (with-eval-after-load 'scss2-edit
@@ -234,28 +152,21 @@ enclosing declaration with the remaining defaults:
         (remove "map_entry" scss2-entity-node-types)))
 ```
 
-This changes all five entity commands together. Selectors still select their
-complete rule, inter-statement body whitespace selects the enclosing block,
-and existing comments select their comment group, regardless of the list.
-Uncomment detection is unchanged. When the selected node is `@if` or `@else if`
-and point is in its condition, kill removes only the condition; the other four
-commands select the whole conditional chain.
+The list does not change what selectors, body whitespace and existing comments select, or how uncomment finds a comment. When the selected node is `@if` or `@else if` and point is in its condition, kill removes only the condition; the other four commands select the whole conditional chain.
 
 ## Frontends
 
-Corfu is the supported frontend. Company works through standard `completion-at-point`, including semantic value choices and Emmet declaration choices; after Company accepts a function value such as `calc()`, point stays after the parentheses, where Corfu places it inside. This is a documented frontend difference. Orderless works with the default `scss2` category.
+Corfu is the supported completion frontend. Company works through standard completion-at-point; after Company accepts a function value such as `calc()`, point stays after the parentheses, where Corfu places it inside. Semantic value choices and Emmet declaration choices both work in Company. Orderless works with the default `scss2` category.
 
-## Current limits
+## Known limits
 
-- Module completion reads local `@use` files, including unsaved edits in open buffers. It does not follow `@forward`, so a module that only forwards offers no names. Unqualified variables, functions, and mixins come only from the current file, not from `@import`ed files.
-- Built-in modules such as `sass:math`, package or load-path modules, and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: other completion functions do not run there, even without a match.
-- Inside a nested property such as `font: { weight: bold; }`, values complete under the full name (`font-weight`), but names are not completed: Emmet writes whole names, which Sass would prefix again. When the stylesheet ends inside an unclosed block, a nested property's outer names can be lost, so values may use a partial name and Emmet may offer whole names.
-- Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments, or an unclosed media group followed by another condition.
-- Parser limits ([full list](https://github.com/P233/tree-sitter-scss#known-limits)): escaped keywords such as `@m\65 dia` are read as ordinary names, and typed `attr()` unions such as `type(<length> | <percentage>)` do not parse.
-- In a media or container query, a feature name continued by interpolation, as in `(max-#{$side} > 1px)`, colors as a value rather than a property.
-- Internet Explorer–only syntax is not supported: the `*` property hack, `alpha(opacity=50)` arguments, `progid:` filters and `expression()` parse as local errors.
+- Module completion reads local `@use` files, including unsaved edits in open buffers, but does not follow `@forward`. Unqualified variables, functions and mixins come only from the current file, not from `@import`ed files.
+- Built-in modules such as `sass:math`, package and load-path modules, and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: later completion functions do not run, even without a match.
+- Inside a nested property such as `font: { weight: bold; }`, values complete under the full name (`font-weight`), but property names do not complete.
+- Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments.
 - A last rule left open after a complete declaration, as in `.a { color: red;` at the end of the file, makes the whole file one parse error, so structural commands stop until `}` is typed; `electric-pair-mode` inserts it with `{`.
-- Each open buffer keeps a syntax tree of tens of bytes per source byte, so several large files use noticeably more memory than `scss-mode`; buffers shown in no window release it after `scss2-idle-release-delay`.
+- Each open buffer keeps a syntax tree of tens of bytes per source byte; buffers shown in no window release it after `scss2-idle-release-delay`.
+- Parser limits, such as escaped keywords and typed `attr()` unions, are listed in [tree-sitter-scss](https://github.com/P233/tree-sitter-scss#known-limits).
 
 ## Development
 
@@ -269,14 +180,9 @@ SCSS2_EMMET2_DIR=/path/to/emmet2-mode make check
 make package
 ```
 
-`make check` verifies the bundled parser against its manifest, runs the isolated core and semantic suites, the Python tests, and the full ERT suite after strict byte compilation, then reruns the suite in a temporary package installation; your installed packages are untouched. `SCSS2_EMMET2_DIR` defaults to `../emmet2-mode`; `make test-core` needs no Emmet checkout. `make package` builds `dist/scss2-mode-<version>.tar` from tracked files and rejects a dirty parser snapshot.
+`make check` verifies the bundled parser against its manifest, runs the isolated core and semantic suites, the Python tests, and the full ERT suite after strict byte compilation, then reruns the suite in a temporary package installation; your installed packages are untouched. `SCSS2_EMMET2_DIR` defaults to `../emmet2-mode`; `make test-core` needs no emmet2-mode checkout. `make package` builds `dist/scss2-mode-<version>.tar` from tracked files and rejects a dirty parser snapshot.
 
-CI also runs `make test-frontends` with the Corfu, compat, yasnippet,
-company-mode, orderless and avy revisions pinned in `.github/workflows/check.yml`.
-To run the same checks locally, place those checkouts under
-`SCSS2_FRONTEND_DIR` (default `.dependencies/`), using those package names as
-directory names, and run `make test-frontends`. Missing dependencies fail the
-checks. Popup and Avy label drawing still need GUI checks.
+CI also runs `make test-frontends` with the Corfu, compat, yasnippet, company-mode, orderless and avy revisions pinned in `.github/workflows/check.yml`. To run the same checks locally, place those checkouts under `SCSS2_FRONTEND_DIR` (default `.dependencies/`), using those package names as directory names, and run `make test-frontends`. Missing dependencies fail the checks. Popup and Avy label drawing still need GUI checks.
 
 Benchmarks and individual integration checks:
 
@@ -303,7 +209,7 @@ python3 scripts/vendor-parser.py --source /path/to/tree-sitter-scss
 SCSS2_EMMET2_DIR=/path/to/emmet2-mode make check
 ```
 
-The manifest records imported content, including uncommitted changes; `make package` requires a committed snapshot. CI runs `make check test-frontends` and `make package` with Emacs 31.1 on Linux and macOS against the pinned Emmet2 commit; advance that pin in the commit that starts depending on newer Emmet2 code.
+The manifest records imported content, including uncommitted changes; `make package` requires a committed snapshot. CI runs `make check test-frontends` and `make package` with Emacs 31.1 on Linux and macOS against the emmet2-mode commit pinned in the workflow; advance that pin in the commit that starts depending on newer emmet2-mode code.
 
 </details>
 

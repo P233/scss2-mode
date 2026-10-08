@@ -599,7 +599,7 @@ recognized selector, literal or declaration owns its complete syntax."
 (defun scss2-context--base-context ()
   "Describe the syntax role at point as a plist, or nil in opaque text.
 The plist contains :role, :beg and :end.  Values additionally carry :property;
-Sass member contexts may carry :module.  Incomplete input is intentional."
+Sass member contexts may carry :module.  Incomplete input is expected."
   (when (and scss2-dialect (treesit-parser-list))
     (let* ((position (point))
            (node (scss2--node-at-point))
@@ -635,7 +635,7 @@ Sass member contexts may carry :module.  Incomplete input is intentional."
   "Describe completion at point, refining value roles for CSS var() references.
 Return nil in opaque text, otherwise a plist with :role, :beg and :end.
 Values retain :property; Sass members may carry :module.  Incomplete input
-is intentional."
+is expected."
   (let ((minimum (point-min)) (maximum (point-max)))
     (scss2--with-font-lock-view
       (when-let* ((context (scss2-context--base-context))

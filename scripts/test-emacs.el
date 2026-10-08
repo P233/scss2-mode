@@ -1,6 +1,6 @@
 ;;; test-emacs.el --- Test the standalone editor package -*- lexical-binding: t; -*-
 ;; SPDX-License-Identifier: GPL-3.0-or-later
-;; SCSS2_EMMET2_DIR selects a real Emmet2 checkout for development.
+;; SCSS2_EMMET2_DIR selects a real emmet2-mode checkout for development.
 ;; SCSS2_TEST_SELECTOR optionally selects ERT tests by regexp.
 ;; SCSS2_TEST_SUITE selects all (default), core, or semantic in a fresh process.
 

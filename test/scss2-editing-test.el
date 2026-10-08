@@ -6,7 +6,7 @@
 (require 'scss2-mode)
 
 (defmacro scss2-editing-test--with-buffer (source &rest body)
-  "Enter the SCSS tree-sitter mode with SOURCE, then evaluate BODY."
+  "Enter `scss2-mode' with SOURCE, then evaluate BODY."
   (declare (indent 1) (debug t))
   `(with-temp-buffer
      (insert ,source)

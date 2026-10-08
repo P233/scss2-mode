@@ -1,4 +1,4 @@
-;;; scss2.el --- CSS and SCSS editing with one tree-sitter grammar -*- lexical-binding: t; -*-
+;;; scss2.el --- CSS and SCSS editing with one Tree-sitter grammar -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
@@ -26,7 +26,7 @@
 (declare-function color-rgb-to-hex "color" (red green blue &optional digits-per-component))
 
 (defcustom scss2-fontify-colors t
-  "Whether to show each literal color on itself as background.
+  "Whether to show each literal color with that color as background.
 Hex colors, CSS color names and rgb(), rgba(), hsl() and hsla() calls with
 literal components are shown.  Set this before entering `scss2-mode' or
 `css2-mode'."
@@ -34,12 +34,12 @@ literal components are shown.  Set this before entering `scss2-mode' or
   :group 'scss2)
 
 (defcustom scss2-fontify-details nil
-  "Whether to highlight numbers, commas and member dots.
-They use the number and delimiter faces, which Emacs's default theme and
-many others leave plain, so nil saves text-property intervals without a
-visible change.  Either way, units use the type face, operators keep their
-faces, and so do names, keywords, strings, comments and escapes.  Parsing,
-completion and structural editing are unchanged.
+  "Whether to highlight numbers, type brackets and delimiters such as commas.
+They use the number, bracket and delimiter faces, which Emacs's default
+theme and many others leave plain, so nil saves text-property intervals
+without a visible change.  Either way, units use the type face,
+operators keep their faces, and so do names, keywords, strings, comments
+and escapes.  Parsing, completion and structural editing are unchanged.
 Set this before entering `scss2-mode' or `css2-mode'.  Reopen existing
 buffers after changing it so their old fontification intervals are freed."
   :type 'boolean
@@ -260,7 +260,7 @@ commands while removing its overlapping automatic completion provider."
   (add-hook 'completion-at-point-functions #'scss2-completion-at-point -90 t))
 
 ;; INTERIM (since 2026-10-03, until treesit.el reads its redisplay and syntax hooks
-;; in Font Lock's view, upstream draft 01): see "Narrowing and the shared parser"
+;; in Font Lock's view): see "Narrowing and the shared parser"
 ;; in docs/architecture.md.
 (defun scss2--pre-redisplay (&rest args)
   "Call `treesit--pre-redisplay' with ARGS in Font Lock's view of the buffer."
@@ -292,7 +292,7 @@ A hook whose original function is undefined or absent stays unchanged."
       (add-hook hook wrapper 0 t))))
 
 ;; INTERIM (since 2026-10-03, until treesit.el commands read the tree in Font Lock's
-;; view, upstream draft 01): see "Narrowing and the shared parser" in docs/architecture.md.
+;; view): see "Narrowing and the shared parser" in docs/architecture.md.
 (defun scss2--move-in-font-lock-view (motion arg)
   "Call MOTION with ARG in Font Lock's view, keeping point accessible.
 Return MOTION's value, or nil when its target lies outside the restriction;
@@ -387,7 +387,7 @@ Return nil in strings and line comments, leaving them to `fill-paragraph'."
       (and (string-match "/\\*" prefix) (replace-match " *" t t prefix)))))
 
 ;; INTERIM (since 2026-10-03, until treesit-fill-reindent-defun decides fill or reindent
-;; outside the restriction, no upstream report yet): see "Tree-sitter commands" in
+;; outside the restriction): see "Tree-sitter commands" in
 ;; docs/architecture.md.
 (defun scss2--fill-reindent-defun (&optional justify)
   "Refill or reindent like `treesit-fill-reindent-defun' with JUSTIFY.
@@ -490,7 +490,7 @@ A nil result would shadow the parent keymaps' remaps."
     (keymap-lookup (keymap-parent map) key nil t)))
 
 ;; INTERIM (since 2026-10-04, until treesit-major-mode-setup stops remapping in the
-;; shared mode map, upstream draft 10): see "Initialization and lifetime" in
+;; shared mode map): see "Initialization and lifetime" in
 ;; docs/architecture.md.
 (defun scss2--scope-tree-remaps ()
   "Make the defun motion remaps apply only where `treesit-major-mode-setup' ran.
@@ -508,7 +508,7 @@ shares, including buffers above `treesit-max-buffer-size'."
 
 (defun scss2--setup (dialect)
   "Set up shared editing for DIALECT with exactly one SCSS-grammar parser.
-As in built-in tree-sitter modes, a buffer larger than
+As in built-in Tree-sitter modes, a buffer larger than
 `treesit-max-buffer-size' or a grammar that cannot be built or loaded only
 warns; it keeps the dialect's syntax, comments, indentation and
 syntactic highlighting of comments and strings."

@@ -123,7 +123,7 @@ def main():
     parser.add_argument("--release", action="store_true",
                         help="Require a clean parser snapshot before building a release")
     parser.add_argument("--emmet-source", type=Path,
-                        help="Also build a local dependency archive for installation tests")
+                        help="Also build emmet2-mode and archive-contents for a local package archive")
     args = parser.parse_args()
     subprocess.run([os.environ.get("PYTHON", "python3"),
                     str(ROOT / "scripts/vendor-parser.py"),

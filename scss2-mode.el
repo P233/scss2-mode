@@ -1,4 +1,4 @@
-;;; scss2-mode.el --- Complete CSS and SCSS structural editing -*- lexical-binding: t; -*-
+;;; scss2-mode.el --- CSS and SCSS modes with completion and structural editing -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
@@ -9,10 +9,12 @@
 ;; URL: https://github.com/P233/scss2-mode
 
 ;;; Commentary:
-;; One package supplies scss2-mode and css2-mode, semantic completion,
-;; structural editing and default Emmet2 abbreviation expansion.  The matching
-;; CSS/SCSS parser is bundled as source and compiled locally on first use.
-;; Requires Emacs with tree-sitter and a C compiler; no grammar download occurs.
+;; Major modes for SCSS (scss2-mode) and CSS (css2-mode) with semantic
+;; completion, structural editing and emmet2-mode declaration abbreviations
+;; (on by default; see `scss2-enable-emmet').  The parser is a bundled
+;; snapshot of P233/tree-sitter-scss, which is independent of the official
+;; grammar; it ships as C source and is compiled locally on first use.
+;; Requires Emacs 31.1 or later built with Tree-sitter, and a C compiler.
 
 ;;; Code:
 (require 'scss2)
@@ -20,7 +22,7 @@
 
 ;;;###autoload
 (define-derived-mode scss2-mode prog-mode "SCSS[ts]"
-  "Edit SCSS with semantic completion, structural edits and Emmet2."
+  "Edit SCSS with semantic completion, structural edits and Emmet."
   :syntax-table nil
   (scss2--setup 'scss))
 

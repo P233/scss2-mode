@@ -4,8 +4,9 @@
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;;; Commentary:
-;; Semantic tables consume an explicit context.  Metadata is an immutable
-;; bundled snapshot; scopes and local module members are derived on demand.
+;; Semantic tables consume an explicit context.  CSS metadata comes from
+;; emmet2-mode's bundled data; scopes and local module members are derived on
+;; demand.
 ;; Tables follow the completion-table protocol and return plain prefix
 ;; matches.  The `scss2' completion style owns CSS and Sass name matching.
 
@@ -163,8 +164,8 @@ DEFINITIONS can reuse visible nodes already collected for this request."
 
 (defun scss2-completion--module-path (module)
   "Resolve MODULE from a literal local @use in this buffer, or return nil.
-Only direct local files are read; load paths and packages require a language
-server.  This intentionally does not retain a second project index."
+Only direct local files are read; load paths and packages are left to other
+completion functions, such as a language server.  No project index is kept."
   (when-let* ((path (cdr (assoc module (scss2--module-namespaces))))
               (_ (not (string-match-p "[:#]" path))))
     (let* ((base (expand-file-name path (if buffer-file-name
