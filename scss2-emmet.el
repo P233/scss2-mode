@@ -30,7 +30,7 @@ signals an error; semantic completion is unchanged."
   ;; Never fall back to another host classifier when this API is missing.
   (unless (and (boundp 'emmet2-context-provider)
                (fboundp 'emmet2-expand-analysis))
-    (error "scss2-mode requires the current Emmet2 host API; update the Emmet2 checkout"))
+    (error "scss2-mode requires emmet2-mode 2.0.0 or later"))
   (setq-local emmet2-context-provider
               (list :analyze #'scss2-emmet--analysis :revision #'scss2-emmet--revision)))
 
