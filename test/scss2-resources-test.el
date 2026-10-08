@@ -102,6 +102,22 @@
       (undo-boundary) (undo-only 1)
       (should (equal (buffer-string) ".a { color: #ff0000; margin: 1px 2px; }")))))
 
+(ert-deftest scss2-resources-color-faces-live-as-long-as-their-text ()
+  (let ((color "#13579b") faces)
+    (dotimes (_ 2)
+      (with-temp-buffer
+        (insert ".a { color: " color "; }")
+        (let ((scss2-fontify-colors t)) (scss2-mode))
+        (scss2-resources-test--fontify)
+        (search-backward color)
+        (push (get-text-property (point) 'face) faces)))
+    ;; `should' keeps its arguments, which would keep the face alive.
+    (let ((shared (and (plist-get (car faces) :background) (eq (car faces) (cadr faces)))))
+      (should shared))
+    (setq faces nil)
+    (garbage-collect)
+    (should-not (gethash color (terminal-parameter nil 'scss2--color-faces)))))
+
 (ert-deftest scss2-resources-release-restores-ranges-after-error-or-quit ()
   (dolist (condition '(error quit))
     (with-temp-buffer

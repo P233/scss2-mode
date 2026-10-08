@@ -163,9 +163,10 @@ Building it takes about 1 ms, so every buffer reuses one."
 (defun scss2--color-face (color)
   "Return the preview face of hex COLOR, shared per color and terminal.
 On a terminal without 24-bit color, `readable-foreground-color' scans the
-terminal's whole color table on every call."
+terminal's whole color table on every call.  A face stays shared while
+some text uses it; once no text does, garbage collection may drop it."
   (let ((faces (or (terminal-parameter nil 'scss2--color-faces)
-                   (let ((table (make-hash-table :test #'equal)))
+                   (let ((table (make-hash-table :test #'equal :weakness 'value)))
                      (set-terminal-parameter nil 'scss2--color-faces table)
                      table))))
     (with-memoization (gethash color faces)
