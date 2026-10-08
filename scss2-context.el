@@ -64,19 +64,22 @@ function never emits declarations; a --named CSS function has a body."
     (setq node (treesit-node-parent node)))
   node)
 
-(defun scss2-context--nested-names (owner)
-  "Return the names of the Sass nested property blocks from block OWNER outward.
-Control-flow and content blocks between them add no name, as in Sass.  The
-outermost name comes first and a dynamic name is nil.  Return nil outside
-nested property blocks."
+(defun scss2-context--declaration-scope (owner)
+  "Return (NAMES . DIRECTIVE) for declarations inside block OWNER.
+NAMES are the Sass nested property names from OWNER outward, outermost
+first, with nil for a dynamic name; they are nil outside nested property
+blocks.  Sass control-flow and content blocks add no name, as in Sass, and
+keep the surrounding descriptor domain, so DIRECTIVE is that of the nearest
+rule or other directive."
   (let (names)
-    (while (member (treesit-node-type owner)
-                   '("property_declaration" "if_statement" "else_clause" "each_statement"
-                     "for_statement" "while_statement" "include_statement"))
-      (when (equal (treesit-node-type owner) "property_declaration")
-        (push (scss2--identifier-name (treesit-node-child-by-field-name owner "name")) names))
-      (setq owner (scss2-context--block-owner (treesit-node-parent owner))))
-    names))
+    (when (eq scss2-dialect 'scss)
+      (while (member (treesit-node-type owner)
+                     '("property_declaration" "if_statement" "else_clause" "each_statement"
+                       "for_statement" "while_statement" "include_statement"))
+        (when (equal (treesit-node-type owner) "property_declaration")
+          (push (scss2--identifier-name (treesit-node-child-by-field-name owner "name")) names))
+        (setq owner (scss2-context--block-owner (treesit-node-parent owner)))))
+    (cons names (scss2--directive owner))))
 
 (defun scss2-context--property-name (nested name)
   "Return property NAME inside NESTED property names, as Sass compiles it.
@@ -480,7 +483,9 @@ recognized selector, literal or declaration owns its complete syntax."
                        (treesit-node-at opening (scss2--language))))))
          (declaration (scss2-context--containing node scss2--declaration-types))
          (sass (eq scss2-dialect 'scss))
-         (nested (and sass (scss2-context--nested-names owner)))
+         (scope (scss2-context--declaration-scope owner))
+         (nested (car scope))
+         (directive (cdr scope))
          (include (and sass (scss2-context--include-context node beginning ending)))
          (selector (scss2-context--selector-p node))
          (case-fold-search (eq scss2-dialect 'css)))
@@ -491,7 +496,8 @@ recognized selector, literal or declaration owns its complete syntax."
              (name (and declaration (treesit-node-child-by-field-name declaration "name"))))
         (scss2-context--context 'property-value beginning ending
                                 :property (scss2-context--property-name
-                                           nested (scss2--identifier-name name)))))
+                                           nested (scss2--identifier-name name))
+                                :at-rule directive)))
      ((and (> beginning (point-min)) (eq (char-before beginning) ?@))
       (when (string-match-p "\\`@[[:alnum:]_-]*\\'" prefix)
         (scss2-context--context 'at-rule (1- beginning) ending :owner owner)))
@@ -520,7 +526,7 @@ recognized selector, literal or declaration owns its complete syntax."
       (plist-put (scss2-context--declaration-context
                   declaration beginning ending nil
                   (and (equal (treesit-node-type declaration) "property_declaration") nested))
-                 :at-rule (scss2--directive owner)))
+                 :at-rule directive))
      ;; Gaps and unfinished input have no complete node to establish their role.
      ((and sass (string-match "\\`@include[ \t\n]+\\(?:\\([[:alnum:]_.-]+\\)\\.\\)?\\([[:alnum:]_-]+\\)([^)]*\\'"
                               prefix))
@@ -576,7 +582,8 @@ recognized selector, literal or declaration owns its complete syntax."
         (unless (and (string-prefix-p "$" property) (not sass))
           (scss2-context--context 'property-value beginning ending
                                   :property (if (string-prefix-p "$" property) property
-                                              (scss2-context--property-name nested property))))))
+                                              (scss2-context--property-name nested property))
+                                  :at-rule directive))))
      ((and (> beginning (point-min)) (eq (char-before beginning) ?:))
       (scss2-context--selector-context beginning ending))
      ((and (scss2--declaration-body-p owner)
@@ -585,7 +592,7 @@ recognized selector, literal or declaration owns its complete syntax."
                (scss2-context--abbreviation-p prefix '(?\s ?\t ?\; ?{ ?}))))
       ;; Expansions write whole names, which a nested property would prefix again.
       (scss2-context--context 'property beginning ending
-                              :at-rule (scss2--directive owner) :start (unless nested start)))
+                              :at-rule directive :start (unless nested start)))
      ((string-prefix-p "@" prefix) nil)
      (t (scss2-context--selector-context beginning ending)))))
 

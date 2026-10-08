@@ -196,12 +196,13 @@ argument from the text, defers an unclosed group in a query statement to the
 `@media`/`@container`/`@supports` statement-text recovery, and treats a Sass
 statement starting with `$` as a variable declaration even outside a block. The
 result contains accessible replacement bounds, a role and only the
-facts consumers need (`:property`, `:owner`, `:module`, `:mixin`, `:query`, `:start`).
+facts consumers need (`:property`, `:at-rule`, `:owner`, `:module`, `:mixin`, `:query`, `:start`).
 No intermediate rule object or context cache is retained. In Sass, `:property`
 is the compiled name of a property declaration inside nested property blocks,
 such as `font-weight` for `weight` in `font: { … }`, also through control-flow
-and content blocks between them. A name slot there has no `:start`, because
-Emmet expansions write whole names that Sass would prefix again.
+and content blocks between them. Those blocks also keep the enclosing
+descriptor domain in `:at-rule`, such as `@font-face`. A name slot there has no
+`:start`, because Emmet expansions write whole names that Sass would prefix again.
 
 A declaration prefix followed by a blank line and a nested selector can be
 parsed as one valid multiline selector. In a declaration body, completion treats

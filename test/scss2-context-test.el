@@ -56,6 +56,34 @@
         (should (eq (plist-get context :role) (cadr case)))
         (should (equal (plist-get context :property) (nth 2 case)))))))
 
+(ert-deftest scss2-context-descriptor-owner-crosses-sass-control-blocks ()
+  (dolist (wrapper '("@if true { %s }" "@if false {} @else { %s }"
+                     "@if false {} @else if true { %s }" "@each $x in a { %s }"
+                     "@for $i from 1 through 2 { %s }" "@while false { %s }"
+                     "@include emit { %s }" "@each $x in a { @if true { %s } }"))
+    (dolist (body '("font-weight: bo│;" "font-weight: │" "font-d│"))
+      (let ((source (concat "@font-face { " (format wrapper body) " }")))
+        (scss2-test-with-buffer 'scss2-mode source
+          (ert-info (source)
+            (should (equal (plist-get (scss2-context-at-point) :at-rule)
+                           "@font-face")))))))
+  (scss2-test-with-buffer 'scss2-mode
+      "@font-face { font: { @if true { weight: bo│; } } }"
+    (let ((context (scss2-context-at-point)))
+      (should (equal (plist-get context :property) "font-weight"))
+      (should (equal (plist-get context :at-rule) "@font-face")))))
+
+(ert-deftest scss2-context-descriptor-owner-stops-at-other-bodies ()
+  (dolist (case '(("@font-face { .a { @if true { font-weight: bo│; } } }" nil)
+                  ("@font-face { @supports (display: grid) { font-weight: bo│; } }"
+                   "@supports")
+                  ("@font-face { @mixin local { @if true { font-weight: bo│; } } }"
+                   "@mixin")
+                  ("@font-face { @property --x { @if true { inherits: tr│; } } }"
+                   "@property")))
+    (scss2-test-with-buffer 'scss2-mode (car case)
+      (should (equal (plist-get (scss2-context-at-point) :at-rule) (cadr case))))))
+
 (ert-deftest scss2-context-unclosed-var-after-a-declaration-expansion ()
   ;; Emmet leaves `prop: ;' with point before the semicolon.
   (dolist (mode '(css2-mode scss2-mode))

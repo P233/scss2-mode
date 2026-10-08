@@ -1347,6 +1347,29 @@
     (scss2-completion-test--with dialect "@font-face { fwbr| }"
       (should-not (member "font-weight: bolder;" (scss2-completion-test--expansions))))))
 
+(ert-deftest scss2-completion-descriptors-inherit-through-sass-control-blocks ()
+  (dolist (wrapper '("@if true { %s }" "@if false {} @else { %s }"
+                     "@if false {} @else if true { %s }" "@each $x in a { %s }"
+                     "@for $i from 1 through 2 { %s }" "@while false { %s }"
+                     "@include emit { %s }" "@each $x in a { @if true { %s } }"))
+    (dolist (case '(("@font-face" "font-weight: bo|;" "bold" "bolder")
+                    ("@font-face" "font-family: se|;" nil "serif")
+                    ("@property --x" "inherits: |;" "true" "inherit")))
+      (scss2-completion-test--with 'scss
+          (concat (car case) " { " (format wrapper (cadr case)) " }")
+        (let ((names (scss2-completion-test--names)))
+          (when (nth 2 case) (should (member (nth 2 case) names)))
+          (should-not (member (nth 3 case) names))))))
+  (scss2-completion-test--with 'scss
+      "@font-face { font: { @if true { weight: bo|; } } }"
+    (let ((names (scss2-completion-test--names)))
+      (should (member "bold" names))
+      (should-not (member "bolder" names))))
+  (scss2-completion-test--with 'scss "@font-face { .a { @if true { font-weight: bo|; } } }"
+    (should (member "bolder" (scss2-completion-test--names))))
+  (scss2-completion-test--with 'scss "@font-face { @if true { font-d| } }"
+    (should (member "font-display: ;" (scss2-completion-test--expansions)))))
+
 (defmacro scss2-completion-test--with-module (source &rest body)
   "Evaluate BODY at | in SOURCE beside a local `_theme.scss' module."
   (declare (indent 1) (debug t))
