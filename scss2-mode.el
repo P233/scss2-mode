@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 Peiwen Lu
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Author: Peiwen Lu <hi@peiwen.lu>
-;; Version: 1.0.0
+;; Version: 1.0.1
 ;; Package-Requires: ((emacs "31.1") (emmet2-mode "2.0.0"))
 ;; Keywords: languages
 ;; URL: https://github.com/P233/scss2-mode
