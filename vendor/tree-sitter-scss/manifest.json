@@ -2,19 +2,19 @@
   "version": "1.0.1",
   "source": {
     "repository": "https://github.com/P233/tree-sitter-scss",
-    "commit": "ee500b9cae6e9a961fa41229ede4fb9fe56e5da3",
+    "commit": "9dbfd7cd8900ebe5192ce80d644f79ebd8fc3a97",
     "dirty": false
   },
   "files": {
     "LICENSE": "fc85bef7cd891ca73a6f06134a1b48a1fc738256ff4567bb8c1dbc5beacfc90b",
-    "src/parser.c": "9eeca8d1e0a6f728f7431e17a6e8bb84f90c1bed0de1e27f8d1650895e6145d6",
+    "src/parser.c": "361069b326fc68800dcc6f7dd54d78a219bd3edd460097d70ff7660e3ac17e12",
     "src/scanner.c": "361200a4c5c56e4e3af7785321ffaa03346a37d7ff98b11450235fe8524c3452",
     "src/node-types.json": "ee938ba972a03318183368615e3b2ca2b53e376f24961d1567080fcdbabf0653",
     "src/tree_sitter/alloc.h": "b29c1c9fb7cc82f58c84b376df1297d6e2737a1d655fd356db0859e3c29c2fea",
     "src/tree_sitter/array.h": "20e6ba85abb9d5b7e2e6dedf675c9424a057a06feee03aa3e2dd48a1cb4bf8a2",
     "src/tree_sitter/parser.h": "180b893c8734778fd32f372dfbc27bd6ad1cd2221f26150b31256ff6716320d2",
-    "queries/highlights.scm": "baf41cde0841a6a2af71091fd09eb0b67884cfc8148240a671d0795376f99965",
+    "queries/highlights.scm": "85386b3853ec538acdc1cf5e7a2d9003fa5fd070413f28c21f1a498af7e05c12",
     "examples/highlight-stress.scss": "b80812dee6aaa5c29d8211bcf56566ad55f0d902f65df06e3fcfe4163cc0eb84"
   },
-  "contentId": "dd9cc341c0e30a9a801e48db1de756638c0ab5dbc1a8b00f33f64ed9342b4add"
+  "contentId": "10c0d40874a65e54f54cd8799c4f4e991c40999323f224051cdf10dad01a43d5"
 }
