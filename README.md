@@ -164,9 +164,9 @@ Corfu is the supported completion frontend. Company works through standard compl
 - Built-in modules such as `sass:math`, package and load-path modules, and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: later completion functions do not run, even without a match.
 - Inside a nested property such as `font: { weight: bold; }`, values complete under the full name (`font-weight`), but property names do not complete.
 - Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments.
-- A last rule left open after a complete declaration, as in `.a { color: red;` at the end of the file, makes the whole file one parse error, so structural commands stop until `}` is typed; `electric-pair-mode` inserts it with `{`.
+- In a short file, a last rule left open after a complete declaration, as in `.a { color: red;` at the end of the file, makes the whole file one parse error, so structural commands stop until `}` is typed; `electric-pair-mode` inserts it with `{`.
 - Each open buffer keeps a syntax tree of tens of bytes per source byte; buffers shown in no window release it after `scss2-idle-release-delay`.
-- Parser limits, such as escaped keywords and typed `attr()` unions, are listed in [tree-sitter-scss](https://github.com/P233/tree-sitter-scss#known-limits).
+- Parser limits, such as typed `attr()` unions, are listed in [tree-sitter-scss](https://github.com/P233/tree-sitter-scss#known-limits).
 
 ## Development
 
