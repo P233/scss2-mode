@@ -264,7 +264,7 @@ multiple direct pairs, such as the two selector parentheses in @scope."
            ((member type '("(" "[" "{" "#{" "\"" "'"))
             (push (cons type child) openings))))))
     (or bounds
-        (when-let* ((arguments (scss2--child node "arguments")))
+        (when-let* ((arguments (treesit-node-child-by-field-name node "arguments")))
           (scss2--interior arguments at-point)))))
 
 (defun scss2--value-bounds (node)

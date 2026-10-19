@@ -240,12 +240,22 @@
     (dolist (source '(":root { --tone: red; } .a { color: var(--tone, --to|"
                       ":root { --tone: red; } .a { color: theme.var(--to|"
                       ":root { --tone: red; } .a { --raw: { var(--tone, --to|) }; }"
+                      ":root { --tone: red; } .a { --x: v\\61r(--tone, --to|); }"
                       ":root { --tone: red; } .a { --raw: { theme.var(--to|) }; }"
                       ":root { --tone: red; } .a { --raw: { \"var(--to|)\" }; }"
                       ":root { --tone: red; } .a { --raw: { /* var(--to|) */ }; }"))
       (scss2-completion-test--with dialect source
         (should-not (eq (plist-get (scss2-context-at-point) :role) 'custom-property))
         (should-not (member "--tone" (scss2-completion-test--names)))))))
+
+(ert-deftest scss2-completion-raw-var-references-include-custom-properties ()
+  (dolist (dialect '(css scss))
+    (dolist (reference '("var(--|)" "v\\61r(--|)"))
+      (scss2-completion-test--with dialect
+          (format ":root { --tone: red; } .a { --x: %s; }" reference)
+        (should (member "--tone" (scss2-completion-test--names)))))
+    (scss2-completion-test--with dialect ":root { --tone: red; } .a { --x: v\\61r(--to|); }"
+      (should (equal (scss2-completion-test--names) '("--tone"))))))
 
 (ert-deftest scss2-completion-custom-property-reference-refines-query-values ()
   (dolist (dialect '(css scss))

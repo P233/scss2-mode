@@ -96,6 +96,28 @@
                           'custom-property 'property-value)))
           (should (equal (plist-get context :property) "background")))))))
 
+(ert-deftest scss2-context-raw-var-references-use-the-direct-first-argument ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (case '((".a { --x: v\\61r(--│); }" custom-property)
+                    (".a { --x: var(--│); }" custom-property)
+                    (".a { --x: VaR(/* first */ --to│, red); }" custom-property)
+                    (".a { --x: translate(v\\61r(--to│)); }" custom-property)
+                    (".a { --x: v\\61r(--y, --to│); }" property-value)
+                    (".a { --x: v\\61r(other(--to│)); }" property-value)
+                    (".a { --x: v\\61r((--to│)); }" property-value)
+                    (".a { --x: translate(--to│); }" property-value)
+                    (".a { --x: if(style(display: gr│id): red; else: blue); }"
+                     property-value)))
+      (scss2-test-with-buffer mode (car case)
+        (ert-info ((format "%s: %s" mode (car case)))
+          (let ((context (scss2-context-at-point)))
+            (should (eq (plist-get context :role) (cadr case)))
+            (should (equal (plist-get context :property) "--x"))
+            (when (eq (cadr case) 'custom-property)
+              (should (equal (buffer-substring-no-properties
+                              (plist-get context :beg) (plist-get context :end))
+                             (if (string-search "--to" (car case)) "--to" "--"))))))))))
+
 (ert-deftest scss2-context-query-groups-without-statement-text-recovery ()
   ;; Only @media, @container and @supports headers have statement-text recovery.
   (dolist (mode '(css2-mode scss2-mode))

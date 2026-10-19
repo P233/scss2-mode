@@ -260,21 +260,19 @@ token, and an unfinished reference leaves an identifier ending at the dot."
 (defun scss2-context--custom-property-reference-p (node beginning)
   "Whether NODE at BEGINNING is the direct first argument of CSS var().
 Use the call's static name and argument boundaries when the tree confirms
-them.  Otherwise, as in raw values, parser recovery or before a missing `)',
+them.  Otherwise, as in parser recovery or before a missing `)',
 accept the simple unqualified var() spelling of the text."
   (when (string-prefix-p "--" (scss2--decode-identifier
                                (buffer-substring-no-properties beginning (point))))
-    (let* ((arguments (scss2-context--containing node '("arguments")))
-           (call (and arguments (treesit-node-parent arguments))))
+    (let* ((call (scss2-context--containing node '("call_expression")))
+           (arguments (and call (treesit-node-child-by-field-name call "arguments"))))
       (or (when arguments
             (let ((first (cl-find-if
                           (lambda (child)
                             (not (member (treesit-node-type child) (cons "(" scss2--comment-types))))
                           (scss2--children arguments))))
-              (and (equal (treesit-node-type call) "call_expression")
-                   (treesit-node-eq arguments (treesit-node-child-by-field-name call "arguments"))
-                   (equal (downcase (or (scss2--identifier-name
-                                        (treesit-node-child-by-field-name call "name")) "")) "var")
+              (and (equal (downcase (or (scss2--identifier-name
+                                         (treesit-node-child-by-field-name call "name")) "")) "var")
                    (not (treesit-node-child-by-field-name call "module"))
                    first (equal (treesit-node-type first) "plain_value")
                    (= (treesit-node-start first) beginning)

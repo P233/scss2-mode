@@ -1925,6 +1925,33 @@
       (should (equal (scss2-edit-test--with-point) (nth 1 case)))
       (should (equal (car kill-ring) (nth 2 case))))))
 
+(ert-deftest scss2-edit-empty-call-names-clear-raw-and-query-arguments ()
+  (dolist (mode '(css2-mode scss2-mode))
+    (dolist (case '((".a { --x: tr│anslate(1px, 2px); }"
+                     ".a { --x: translate(│); }" "1px, 2px")
+                    (".a { --x: var(--y, tr│anslate(1px, 2px)); }"
+                     ".a { --x: var(--y, translate(│)); }" "1px, 2px")
+                    (".a { --x: v\\61│r(--y, 1px); }"
+                     ".a { --x: v\\61r(│); }" "--y, 1px")
+                    (".a { --x: if(st│yle(display: grid): red; else: blue); }"
+                     ".a { --x: if(style(│): red; else: blue); }" "display: grid")
+                    (".a { color: if(st│yle(--x: 1): red; else: blue); }"
+                     ".a { color: if(style(│): red; else: blue); }" "--x: 1")
+                    ("@container st│yle(--x: 1) { .c { d: e; } }"
+                     "@container style(│) { .c { d: e; } }" "--x: 1")
+                    ("@import url(a.css) sup│ports(display: grid);"
+                     "@import url(a.css) supports(│);" "display: grid")))
+      (scss2-edit-test--buffer mode (car case)
+        (buffer-enable-undo)
+        (setq buffer-undo-list nil)
+        (let ((original (buffer-string)))
+          (scss2-empty)
+          (should (equal (scss2-edit-test--with-point) (nth 1 case)))
+          (should (equal (car kill-ring) (nth 2 case)))
+          (undo-boundary)
+          (undo 1)
+          (should (equal (buffer-string) original)))))))
+
 (ert-deftest scss2-edit-empty-clears-string-and-interpolation-interiors ()
   (dolist (case '(((css2-mode scss2-mode) ".a { content: \"a │b\" !important; }"
                    ".a { content: \"│\" !important; }" "a b")
