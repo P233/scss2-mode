@@ -1,8 +1,8 @@
 {
-  "version": "1.0.1",
+  "version": "1.1.0",
   "source": {
     "repository": "https://github.com/P233/tree-sitter-scss",
-    "commit": "5e49bec2a91f2c572fe7e79a7a3e777ad4234a28",
+    "commit": "fc74a97c0cc0bcb869c45e552e02eb53038f0e55",
     "dirty": false
   },
   "files": {
