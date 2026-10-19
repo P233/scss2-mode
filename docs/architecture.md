@@ -232,6 +232,11 @@ because attribute selectors put their operator first. Strings, calls and
 nested brackets balance inside the group, so `=` or `]` there stays part of a
 raw value, as in `bgi[url(a.png?x=1)]`, `ct[']']` or `gtc[repeat(2, [a] 1fr)]`.
 
+Module namespaces come from every `@use` keyword in the buffer that starts a
+`use_statement`, including statements retained under `ERROR`. A case-sensitive
+text search finds the keywords in buffer order; the tree confirms each
+statement and supplies its literal source and alias.
+
 Composition routes declaration prefixes to Emmet and other supported roles to
 semantic completion. Semantic tables are exclusive: other completion functions
 do not run in an owned context, even without a match. A module without a local
@@ -420,8 +425,8 @@ linear scans. Definition enumeration is proportional to tree size plus scope
 checks. Module exports and matching must inspect the offered symbol set; no O(1)
 large-project claim is made. Path completion lists one local directory per
 request. Module completion resolves the namespace's `@use` and checks that its
-file exists on every request; that reads every `@use` in the tree, about 1.4 ms
-more per key on `examples/highlight-stress.scss` (72 KB) and 17 ms on its
+file exists on every request; finding the `@use` statements costs about 0.17 ms
+per request on `examples/highlight-stress.scss` (72 KB) and 2.0 ms on its
 tenfold repetition (724 KB, byte-compiled, batch). It enumerates and parses the
 module only when its members are queried.
 

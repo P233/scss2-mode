@@ -4,6 +4,29 @@
 (require 'ert)
 (require 'scss2-mode)
 
+(ert-deftest scss2-performance-module-namespaces-use-tree-confirmed-keywords ()
+  (dolist (mode '(scss2-mode css2-mode))
+    (dolist (prefix '("" "@forward 'a'; $x: 1; /* note */\n" ".a {}\n" "}\n" ".a {\n"))
+      (with-temp-buffer
+        (insert prefix "@use 'sass:math';\n@use 'lib/_tokens.scss';\n"
+                "/* @use 'comment'; */ .a { content: \"@use 'string'\"; }\n"
+                "@USE 'upper';\n@use 'new@use/path' as tokens;")
+        (funcall mode)
+        (goto-char (point-min))
+        (search-forward "@use")
+        (let ((position (point))
+              (capture (symbol-function 'treesit-query-capture)))
+          (cl-letf (((symbol-function 'treesit-query-capture)
+                     (lambda (node &rest args)
+                       ;; A capture from the root, a parser or a language reads the whole tree.
+                       (should (and (treesit-node-p node) (treesit-node-parent node)))
+                       (apply capture node args))))
+            (should (equal (scss2--module-namespaces)
+                           '(("tokens" . "new@use/path")
+                             ("tokens" . "lib/_tokens.scss")
+                             ("math" . "sass:math")))))
+          (should (= position (point))))))))
+
 (ert-deftest scss2-performance-module-export-names-are-read-once ()
   (with-temp-buffer
     (dotimes (i 100) (insert (format "$token%d: red;\n" i)))

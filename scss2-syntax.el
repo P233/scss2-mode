@@ -547,22 +547,25 @@ This also works before the parser can recognize an incomplete declaration."
   "Return (NAMESPACE . SOURCE) for every literal @use in this buffer.
 Both names and source strings are decoded.
 A later @use of the same namespace comes first."
-  (let (modules)
-    (dolist (capture (treesit-query-capture (scss2--root-node)
-                                          (scss2--query '((use_statement) @use))))
-      (let* ((node (cdr capture))
-             (string (scss2--child node "string"))
-             (alias (treesit-node-child-by-field-name node "alias"))
-             (source (scss2--literal-string string)))
-        (when source
-          (push (cons (if alias
-                          (scss2--identifier-name alias)
-                        ;; `sass:math' and `lib/_math.scss' are both `math'.
-                        (string-remove-prefix
-                         "_" (file-name-base (car (last (split-string source "[:/]"))))))
-                      source)
-                modules))))
-    modules))
+  (save-excursion
+    (goto-char (point-min))
+    (let ((case-fold-search nil) modules)
+      ;; Recovery can retain @use below other statements, so search the whole buffer.
+      (while (search-forward "@use" nil t)
+        (let ((start (match-beginning 0)))
+          (when-let* ((node (scss2--ancestor (treesit-node-at start (scss2--language))
+                                            '("use_statement")))
+                      (_ (= start (treesit-node-start node)))
+                      (source (scss2--literal-string (scss2--child node "string"))))
+            (let ((alias (treesit-node-child-by-field-name node "alias")))
+              (push (cons (if alias
+                              (scss2--identifier-name alias)
+                            ;; `sass:math' and `lib/_math.scss' are both `math'.
+                            (string-remove-prefix
+                             "_" (file-name-base (car (last (split-string source "[:/]"))))))
+                          source)
+                    modules)))))
+      modules)))
 
 (defun scss2--recovered-sass-scopes (node)
   "Recover active Sass scopes from NODE's surviving ERROR tokens.
