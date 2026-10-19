@@ -125,15 +125,15 @@
     (should (memq 'font-lock-comment-face (scss2-editing-test--faces "silent #{$tone}" 9)))
     (scss2-editing-test--assert-covered)))
 
-(ert-deftest scss2-editing-predicates-limit-pseudo-and-calculation-faces ()
+(ert-deftest scss2-editing-predicates-limit-pseudo-faces ()
   (scss2-editing-test--with-buffer
       "a:lang(en):not(button) { x: calc(pi); y: ordinary(pi); z: calc(custom); }"
     (should (equal (scss2-editing-test--faces "en)")
                    (scss2-editing-test--faces "custom")))
     (should-not (equal (scss2-editing-test--faces "en)")
                        (scss2-editing-test--faces "button")))
-    (should-not (equal (scss2-editing-test--faces "calc(pi)" 5)
-                       (scss2-editing-test--faces "ordinary(pi)" 9)))
+    (should (equal (scss2-editing-test--faces "calc(pi)" 5)
+                   (scss2-editing-test--faces "ordinary(pi)" 9)))
     (should (equal (scss2-editing-test--faces "ordinary(pi)" 9)
                    (scss2-editing-test--faces "custom")))
     (scss2-editing-test--assert-covered)))
@@ -146,7 +146,7 @@
     (should (memq 'font-lock-keyword-face (scss2-editing-test--faces "to {")))
     (scss2-editing-test--assert-covered)))
 
-(ert-deftest scss2-editing-all-math-functions-fontify-numeric-constants ()
+(ert-deftest scss2-editing-all-math-functions-fontify-constants-as-plain-values ()
   ;; CSS Values 4, sections 10.1-10.6.
   (dolist (function '("calc" "min" "max" "clamp" "round" "mod" "rem"
                       "sin" "cos" "tan" "asin" "acos" "atan" "atan2"
@@ -155,9 +155,9 @@
       (scss2-editing-test--with-buffer
           (format ".sample { width: %s(pi); }" spelling)
         (should (equal (scss2-editing-test--faces "pi)")
-                       '(font-lock-builtin-face)))))))
+                       '(font-lock-constant-face)))))))
 
-(ert-deftest scss2-editing-escaped-math-constants-have-builtin-faces ()
+(ert-deftest scss2-editing-escaped-math-constants-have-plain-value-faces ()
   (dolist (example '(("calc(p\\69)" . "p\\69")
                      ("calc(\\000070i)" . "\\000070i")
                      ("sqrt(\\pi)" . "\\pi")
@@ -167,9 +167,9 @@
     (scss2-editing-test--with-buffer
         (format ".sample { width: %s; }" (car example))
       (should (equal (scss2-editing-test--faces (cdr example))
-                     '(font-lock-builtin-face))))))
+                     '(font-lock-constant-face))))))
 
-(ert-deftest scss2-editing-math-context-survives-nesting-without-leaking ()
+(ert-deftest scss2-editing-math-constants-keep-plain-value-faces-when-nested ()
   (scss2-editing-test--with-buffer
       ".sample { a: calc(sqrt(pi) + min(e, max(infinity, 1))); b: calc((pi + e)); c: round(up, acos(pi / 4), 1); d: ordinary(pi); e: calc(ordinary(pi)); f: theme.calc(pi); g: calc(theme.calc(pi)); h: calc(var(--value, pi)); }"
     (dolist (context '("sqrt(pi" "min(e" "max(infinity" "calc((pi" "pi + e" "acos(pi"))
@@ -178,7 +178,7 @@
                 context (cond ((equal context "pi + e") 5)
                               ((equal context "calc((pi") 6)
                               (t (1+ (string-match "(" context)))))
-               '(font-lock-builtin-face))))
+               '(font-lock-constant-face))))
     (dolist (context '("d: ordinary(pi" "e: calc(ordinary(pi" "f: theme.calc(pi"
                        "g: calc(theme.calc(pi" "h: calc(var(--value, pi"))
       (should (equal (scss2-editing-test--faces context (- (length context) 2))
