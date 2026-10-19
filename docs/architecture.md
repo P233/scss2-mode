@@ -149,7 +149,11 @@ Visible buffers in all frames, active completion sessions, and indirect buffers
 and their bases are excluded. Parsers with custom ranges, other packages'
 notifiers, or additional parsers also remain untouched because they have other
 lifecycle owners; the mode's own change notifier does not count. Cleanup does
-not force GC; freed allocations can remain resident in Emacs's allocator.
+not force GC; freed allocations can remain resident in Emacs's allocator. A
+retained parser and the cursor of each compiled query also keep their
+high-water capacity, since Tree-sitter clears those buffers without shrinking
+them; Emacs frees them only when garbage collection reclaims the parser or
+query, so the session-cached internal queries keep theirs for the session.
 
 ### Lexical editing without css-mode
 
