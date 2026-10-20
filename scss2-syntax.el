@@ -543,6 +543,37 @@ This also works before the parser can recognize an incomplete declaration."
            text)))
      (scss2--children node t) "")))
 
+(defun scss2--custom-property-reference-p (call beginning)
+  "Whether the name from BEGINNING to point is the first argument of var() CALL.
+Use the call's static name and argument boundaries when the tree confirms
+them.  Otherwise, as in parser recovery or before a missing `)',
+accept the simple unqualified var() spelling of the text."
+  (when (string-prefix-p "--" (scss2--decode-identifier
+                               (buffer-substring-no-properties beginning (point))))
+    (let ((arguments (and call (treesit-node-child-by-field-name call "arguments"))))
+      (or (when arguments
+            (let ((first (cl-find-if
+                          (lambda (child)
+                            (not (member (treesit-node-type child) (cons "(" scss2--comment-types))))
+                          (scss2--children arguments))))
+              (and (equal (downcase (or (scss2--identifier-name
+                                         (treesit-node-child-by-field-name call "name")) "")) "var")
+                   (not (treesit-node-child-by-field-name call "module"))
+                   first (equal (treesit-node-type first) "plain_value")
+                   (= (treesit-node-start first) beginning)
+                   (<= (point) (treesit-node-end first)))))
+          (save-excursion
+            (when-let* ((opening (nth 1 (syntax-ppss beginning)))
+                        (_ (eq (char-after opening) ?\()))
+              (goto-char opening)
+              (skip-chars-backward "[:alnum:]_-")
+              (when (and (equal (downcase (buffer-substring-no-properties (point) opening)) "var")
+                         (not (memq (char-before) '(?. ?$ ?\\))))
+                (goto-char (1+ opening))
+                (condition-case nil
+                    (progn (forward-comment (point-max)) (= (point) beginning))
+                  (scan-error nil)))))))))
+
 (defun scss2--module-namespaces ()
   "Return (NAMESPACE . SOURCE) for every literal @use in this buffer.
 Both names and source strings are decoded.

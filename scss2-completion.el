@@ -146,21 +146,37 @@ blocks that still enclose point are recovered."
   (cl-loop for (type in-block) in (scss2-completion--scopes)
            when in-block collect type))
 
-(cl-defun scss2-completion--names
-    (types &optional variable (definitions (scss2-completion--definitions types)))
-  "Return names of visible TYPES; VARIABLE also includes lexical bindings.
-DEFINITIONS can reuse visible nodes already collected for this request."
-  (let ((position (point)) names)
+(cl-defun scss2-completion--bindings
+    (types &optional variable (definitions (scss2-completion--definitions types)) transform)
+  "Return name nodes of visible TYPES; VARIABLE includes lexical bindings.
+DEFINITIONS can reuse visible nodes already collected for this request.
+TRANSFORM optionally projects each name node while collecting it."
+  (let ((position (point)) bindings)
     (dolist (node definitions)
       (when (and (member (treesit-node-type node) types)
                  (or (not variable) (scss2-completion--bound-p node position)))
         (when-let* ((name (treesit-node-child-by-field-name node "name")))
-          (push (scss2-completion--text name) names))))
+          (push (if transform (funcall transform name) name) bindings))))
     (when variable
       (dolist (scope (scss2-completion--scopes))
         (dolist (binder (cddr scope))
-          (push (scss2-completion--text binder) names))))
-    (delete-dups names)))
+          (push (if transform (funcall transform binder) binder) bindings))))
+    bindings))
+
+(cl-defun scss2-completion--names
+    (types &optional variable (definitions (scss2-completion--definitions types)))
+  "Return names of visible TYPES; VARIABLE also includes lexical bindings.
+DEFINITIONS can reuse visible nodes already collected for this request."
+  (delete-dups (scss2-completion--bindings types variable definitions
+                                           #'scss2-completion--text)))
+
+(defun scss2-completion--custom-properties ()
+  "Return (NODE . NAME) for static custom properties in source order."
+  (cl-loop for capture in (treesit-query-capture (scss2--root-node)
+                                                (scss2--query '((property_declaration name: (property_name) @property))))
+           for node = (cdr capture)
+           for name = (scss2--identifier-name node)
+           when (and name (string-prefix-p "--" name)) collect (cons node name)))
 
 (defun scss2-completion--module-path (module)
   "Resolve MODULE from a literal local @use in this buffer, or return nil.
@@ -380,11 +396,9 @@ Sass loads `_name.scss' and `name.scss' as `name', so offer that name too."
                    (scss2-completion--named-arguments definition)))))
          (append arguments (scss2-completion--values nil))))
       ('custom-property
-       (cl-loop for capture in (treesit-query-capture (scss2--root-node)
-                                                      (scss2--query '((property_declaration name: (property_name) @property))))
-                for name = (scss2--identifier-name (cdr capture))
-                when (and name (string-prefix-p "--" name))
-                collect (cons (scss2-completion--custom-property-spelling name) "Custom property"))))))
+       (mapcar (lambda (entry)
+                 (cons (scss2-completion--custom-property-spelling (cdr entry)) "Custom property"))
+               (scss2-completion--custom-properties))))))
 
 (add-to-list 'completion-styles-alist
              (cons 'scss2 (cdr (assq 'emmet2-name completion-styles-alist))))

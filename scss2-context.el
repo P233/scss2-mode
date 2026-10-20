@@ -258,36 +258,9 @@ token, and an unfinished reference leaves an identifier ending at the dot."
           (and (assoc name (scss2--module-namespaces)) name)))))))
 
 (defun scss2-context--custom-property-reference-p (node beginning)
-  "Whether NODE at BEGINNING is the direct first argument of CSS var().
-Use the call's static name and argument boundaries when the tree confirms
-them.  Otherwise, as in parser recovery or before a missing `)',
-accept the simple unqualified var() spelling of the text."
-  (when (string-prefix-p "--" (scss2--decode-identifier
-                               (buffer-substring-no-properties beginning (point))))
-    (let* ((call (scss2-context--containing node '("call_expression")))
-           (arguments (and call (treesit-node-child-by-field-name call "arguments"))))
-      (or (when arguments
-            (let ((first (cl-find-if
-                          (lambda (child)
-                            (not (member (treesit-node-type child) (cons "(" scss2--comment-types))))
-                          (scss2--children arguments))))
-              (and (equal (downcase (or (scss2--identifier-name
-                                         (treesit-node-child-by-field-name call "name")) "")) "var")
-                   (not (treesit-node-child-by-field-name call "module"))
-                   first (equal (treesit-node-type first) "plain_value")
-                   (= (treesit-node-start first) beginning)
-                   (<= (point) (treesit-node-end first)))))
-          (save-excursion
-            (when-let* ((opening (nth 1 (syntax-ppss beginning)))
-                        (_ (eq (char-after opening) ?\()))
-              (goto-char opening)
-              (skip-chars-backward "[:alnum:]_-")
-              (when (and (equal (downcase (buffer-substring-no-properties (point) opening)) "var")
-                         (not (memq (char-before) '(?. ?$ ?\\))))
-                (goto-char (1+ opening))
-                (condition-case nil
-                    (progn (forward-comment (point-max)) (= (point) beginning))
-                  (scan-error nil)))))))))
+  "Whether NODE at BEGINNING is the direct first argument of CSS var()."
+  (scss2--custom-property-reference-p
+   (scss2-context--containing node '("call_expression")) beginning))
 
 (defun scss2-context--identifier-bounds (node)
   "Return complete identifier bounds at point, including an ending token.

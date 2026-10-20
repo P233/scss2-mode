@@ -62,15 +62,21 @@
 
 (scss2-bench--report
  (list :emacs emacs-version :gc_threshold gc-cons-threshold :gc_percentage gc-cons-percentage
-       :host (locate-library "scss2-completion") :emmet (locate-library "emmet2-capf")
+       :host (locate-library "scss2-completion") :emmet (locate-library "emmet2-capf") :xref_loaded (featurep 'xref)
        :bytecode (and (byte-code-function-p (symbol-function 'scss2-completion-at-point))
                       (byte-code-function-p (symbol-function 'emmet2-capf)))))
 
 (dolist (size '(0 1000))
-  (dolist (input '("dis" "m10" "display: fl" "color: $to" "@me"))
+  (dolist (input '("dis" "m10" "display: fl" "color: $to" "@me" "var(--tok"))
     (with-temp-buffer
-      (dotimes (i size) (insert (format "$token%d: red; .rule%d { color: red; }\n" i i)))
-      (insert ".a { " input " }") (backward-char 2)
+      (if (string-prefix-p "var(" input)
+          (progn
+            (insert ":root {\n")
+            (dotimes (i size) (insert (format "--token%d: red;\n" i)))
+            (insert "}\n.a { color: "))
+        (dotimes (i size) (insert (format "$token%d: red; .rule%d { color: red; }\n" i i)))
+        (insert ".a { "))
+      (insert input " }") (backward-char 2)
       (let ((position (point)) (scss2-fontify-colors nil)) (scss2-mode) (goto-char position))
       (scss2--root-node)
       (scss2-bench--trace
