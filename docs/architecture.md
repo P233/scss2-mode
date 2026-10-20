@@ -581,14 +581,23 @@ then acts only inside the caller's restriction:
   that begins inside the restriction. Otherwise it fails like a regexp search,
   stopping at the edge when asked to move.
 
-Imenu needs no wrapper: `imenu--make-index-alist` widens before reading. With
-an accessible target, results equal the widened buffer's, except for lisp.el's
-`end-of-defun` and `mark-defun` as described above; without narrowing they
-equal the treesit.el commands'. On a real 19 KB stylesheet narrowed to 30
+Imenu uses the same `treesit-simple-imenu-settings` in both dialects: Mixins,
+Functions, Variables (module-level declarations, without block-local variables
+or module assignments), Placeholders (rules whose whole selector is one
+placeholder), Keyframes and Rules. Placeholder rules appear under both
+Placeholders and Rules, and keyframe steps such as `from` and `to` stay under
+Rules. `treesit-outline-predicate` is the defun regexp, so outline headings stay
+on rules, mixins and functions; left unset, `treesit-major-mode-setup` would
+derive them from the imenu categories. The standard builder omits empty
+categories and runs only on request, without another index, cache or editing
+hook. Imenu needs no wrapper: `imenu--make-index-alist` widens before reading.
+With an accessible target, results equal the widened buffer's, except for
+lisp.el's `end-of-defun` and `mark-defun` as described above; without narrowing
+they equal the treesit.el commands'. On a real 19 KB stylesheet narrowed to 30
 lines around each sampled line, stock `M-q` reported "No defun detected at
 point" for 31 of 104 restrictions and the wrappers for none whose restriction
-contains point. Measured with the batch harness described above, per
-invocation including the redisplay that follows:
+contains point. Measured with the batch harness described above, per invocation
+including the redisplay that follows:
 
 | Case | treesit.el commands | Wrappers |
 | --- | --- | --- |

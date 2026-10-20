@@ -241,6 +241,25 @@ Interpolation and comments inside NODE are left untouched."
                   (treesit-node-child node 0 t))))
     (when name (treesit-node-text name t))))
 
+(defun scss2--imenu-module-variable-p (node)
+  "Return non-nil if NODE declares a variable in the current module."
+  (and (equal (treesit-node-type (treesit-node-parent node)) "stylesheet")
+       (not (treesit-node-child-by-field-name node "module"))))
+
+(defun scss2--imenu-placeholder-name (node)
+  "Return NODE's placeholder name if it is the whole rule selector."
+  (let ((selectors (treesit-node-child-by-field-name node "selectors")))
+    (when (and (= (treesit-node-child-count selectors) 1)
+               (equal (treesit-node-type (treesit-node-child selectors 0)) "placeholder_selector"))
+      (treesit-node-text selectors t))))
+
+(defun scss2--imenu-keyframes-name (node)
+  "Return the name of the keyframes statement NODE, past any header comment."
+  (let ((name (treesit-node-child node 0 t)))
+    (while (and name (treesit-node-check name 'extra))
+      (setq name (treesit-node-next-sibling name t)))
+    (when name (treesit-node-text name t))))
+
 ;;;###autoload
 (defun scss2-completion-at-point ()
   "Dispatch completion using the single context at point.
@@ -540,7 +559,14 @@ syntactic highlighting of comments and strings."
     (setq-local treesit-simple-imenu-settings
                 '(("Mixins" "\\`mixin_definition\\'" nil scss2--defun-name)
                   ("Functions" "\\`function_definition\\'" nil scss2--defun-name)
+                  ("Variables" "\\`variable_declaration\\'"
+                   scss2--imenu-module-variable-p scss2--defun-name)
+                  ("Placeholders" "\\`rule_set\\'"
+                   scss2--imenu-placeholder-name scss2--imenu-placeholder-name)
+                  ("Keyframes" "\\`keyframes_statement\\'" nil scss2--imenu-keyframes-name)
                   ("Rules" "\\`rule_set\\'" nil scss2--defun-name)))
+    ;; Otherwise `treesit-major-mode-setup' takes outline headings from Imenu.
+    (setq-local treesit-outline-predicate treesit-defun-type-regexp)
     (scss2--own-completion)
     (add-hook 'emmet2-mode-hook #'scss2--own-completion nil t)
     (treesit-major-mode-setup)
