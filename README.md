@@ -96,6 +96,8 @@ TAB indents and moves through declarations and maps. Before a nonempty line's fi
 
 The modes neither load nor run Emacs's `css-mode`. They supply their own comment syntax, comment filling, color previews and indentation. Indentation nests by `scss2-indent-offset`, follows a block's existing indentation, and indents continued values and selectors as Prettier does; EditorConfig's `indent_size` sets `scss2-indent-offset`, and `css-indent-offset` is not read. `derived-mode-p` still matches `css-mode` in both modes and `scss-mode` in `scss2-mode`, but those modes' hooks and key bindings do not apply; use `scss2-mode-hook`, `css2-mode-hook` and their maps. Highlighting uses Font Lock faces plus `scss2-selector` and `scss2-property`, so themes own the palette.
 
+In SCSS, `///` SassDoc comments use the doc face. Annotations such as `@param`, `@return` and `@example` use the doc-markup face, `{type}` uses the type face and `$name` after `@param` uses the variable-name face. Annotation aliases are supported. Example bodies keep the doc face. This highlighting is independent of `scss2-fontify-details`.
+
 ### Structural commands
 
 TAB runs `scss2-tab` in both modes. The other commands have no default bindings; run them with `M-x` or bind them in `scss2-mode-map` and `css2-mode-map`:

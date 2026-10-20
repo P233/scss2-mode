@@ -32,6 +32,89 @@
   (cl-loop for position from (point-min) below (point-max)
            collect (get-text-property position 'face)))
 
+(ert-deftest scss2-highlighting-sassdoc-structure ()
+  (dolist (details '(nil t))
+    (scss2-highlighting-test--with-buffer 'scss2-mode
+        "/// Scale a value.\n/// @param {Number | Length} $amount - Scale factor.\n/// @return {Number} Result.\n/// @type Map\n/// @see other\n/// @deprecated Use scale.\n/// @access public\n/// @group math\n/// @example scss\n///   .sample { width: scale($amount); }\n///     @return scale($amount);\n///   @content;\n@function scale($amount) { @return $amount; }\n"
+      (let ((scss2-fontify-details details))
+        (scss2-mode)
+        (let ((noninteractive nil)) (font-lock-mode 1))
+        (font-lock-ensure)
+        (dolist (text '("@param" "@return" "@type" "@see" "@deprecated" "@access" "@group" "@example"))
+          (scss2-highlighting-test--face text 'font-lock-doc-markup-face))
+        (dolist (text '("{Number | Length}" "{Number}"))
+          (scss2-highlighting-test--face text 'font-lock-type-face))
+        (scss2-highlighting-test--face "$amount" 'font-lock-variable-name-face)
+        (dolist (text '("///" "Scale a value." "Scale factor." "Map" "scss"
+                        ".sample { width: scale($amount); }" "@return scale($amount);" "@content;"))
+          (scss2-highlighting-test--face text 'font-lock-doc-face))))))
+
+(ert-deftest scss2-highlighting-sassdoc-annotations-and-aliases ()
+  (scss2-highlighting-test--with-buffer 'scss2-mode
+      "/// @alias other\n/// @author Author\n/// @content Content\n/// @ignore\n/// @link url\n/// @source url\n/// @name name\n/// @output CSS\n/// @outputs CSS\n/// @parameter {Map} $a\n/// @arg $b\n/// @argument $c\n/// @property {Map} key\n/// @prop {Map} key\n/// @require {function} f\n/// @requires f\n/// @returns {Map}\n/// @since 1.0\n/// @throw message\n/// @throws message\n/// @exception message\n/// @todo task\n/// @unknown {Map} $plain\n/// @parametric $plain\n"
+    (dolist (text '("@alias" "@author" "@content" "@ignore" "@link" "@source"
+                    "@name" "@output" "@outputs" "@parameter" "@arg" "@argument"
+                    "@property" "@prop" "@require" "@requires" "@returns" "@since"
+                    "@throw" "@throws" "@exception" "@todo"))
+      (scss2-highlighting-test--face text 'font-lock-doc-markup-face))
+    (dolist (text '("$a" "$b" "$c"))
+      (scss2-highlighting-test--face text 'font-lock-variable-name-face))
+    (scss2-highlighting-test--face "@unknown {Map} $plain" 'font-lock-doc-face)
+    (scss2-highlighting-test--face "@parametric $plain" 'font-lock-doc-face)))
+
+(ert-deftest scss2-highlighting-sassdoc-leaves-other-comments-and-code-alone ()
+  (dolist (mode '(scss2-mode css2-mode))
+    (scss2-highlighting-test--with-buffer mode
+        "// @param {Number} $line\n/* @return {Number} $block\n/// @param {String} $nested\n*/\n.a { content: \"/// @param {String} $quoted\"; width: $value; }\n/// @param {Map} $doc\n"
+      (scss2-highlighting-test--face
+       "// @param {Number} $line"
+       (if (eq mode 'scss2-mode) 'font-lock-comment-face 'font-lock-warning-face))
+      (scss2-highlighting-test--face
+       "/* @return {Number} $block\n/// @param {String} $nested\n*/" 'font-lock-comment-face)
+      (scss2-highlighting-test--face
+       "\"/// @param {String} $quoted\"" 'font-lock-string-face)
+      (scss2-highlighting-test--face "$value" 'font-lock-variable-name-face)
+      (when (eq mode 'css2-mode)
+        (scss2-highlighting-test--face "/// @param {Map} $doc" 'font-lock-warning-face)))))
+
+(ert-deftest scss2-highlighting-sassdoc-inside-a-rule ()
+  (scss2-highlighting-test--with-buffer 'scss2-mode
+      ".a {\n  /// @param {Length} $size - Inner documentation.\n  width: 1px;\n}\n"
+    (scss2-highlighting-test--face "@param" 'font-lock-doc-markup-face)
+    (scss2-highlighting-test--face "{Length}" 'font-lock-type-face)
+    (scss2-highlighting-test--face "$size" 'font-lock-variable-name-face)
+    (scss2-highlighting-test--face "width" 'scss2-property)))
+
+(ert-deftest scss2-highlighting-sassdoc-clips-partial-fontification ()
+  (scss2-highlighting-test--with-buffer 'scss2-mode
+      "/// @param {Length} $size - Description.\n.a { width: 1px; }\n"
+    (goto-char (point-min))
+    (search-forward "Length")
+    (let ((start (match-beginning 0)) (end (match-end 0)))
+      (put-text-property (point-min) (point-max) 'face 'font-lock-warning-face)
+      (treesit-font-lock-fontify-region start end)
+      (scss2-highlighting-test--face "Length" 'font-lock-type-face)
+      (should-not (text-property-not-all (point-min) start 'face 'font-lock-warning-face))
+      (should-not (text-property-not-all end (point-max) 'face 'font-lock-warning-face)))))
+
+(ert-deftest scss2-highlighting-sassdoc-damaged-input-and-edits ()
+  (scss2-highlighting-test--with-buffer 'scss2-mode
+      "/// @param {Number $broken\n/// @return {}\n.a { width: ; }\n/// @param $last"
+    (scss2-highlighting-test--face "@param" 'font-lock-doc-markup-face)
+    (scss2-highlighting-test--face "{Number $broken" 'font-lock-doc-face)
+    (scss2-highlighting-test--face "{}" 'font-lock-doc-face)
+    (scss2-highlighting-test--face "$last" 'font-lock-variable-name-face)
+    (goto-char (point-min))
+    (dolist (event '(delete insert))
+      (if (eq event 'delete) (delete-char 1) (insert "/"))
+      (run-hook-with-args 'pre-redisplay-functions nil)
+      (font-lock-ensure)
+      (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+        (should (equal (scss2-highlighting-test--faces)
+                       (scss2-highlighting-test--with-buffer 'scss2-mode text
+                         (scss2-highlighting-test--faces))))))
+    (scss2-highlighting-test--face "@param" 'font-lock-doc-markup-face)))
+
 (ert-deftest scss2-highlighting-selector-prefixes-share-the-name-face ()
   (dolist (mode '(scss2-mode css2-mode))
     (scss2-highlighting-test--with-buffer mode

@@ -134,6 +134,15 @@ which inherit the function-name and keyword faces as css-mode's selector and
 property faces do. The remaining roles use standard Font Lock faces, so themes
 own the palette without a mode-specific color scheme or theme dependency.
 
+SCSS adds a Font Lock function capture for `inline_comment` nodes starting with
+`///`. It applies the doc face, then recognizes an unindented SassDoc annotation and
+its optional `{type}` and parameter name. Annotation aliases use the same faces.
+The capture clips every face to Font Lock's requested range and never scans text
+outside these nodes. One optional blank separates the marker from the text;
+extra indentation keeps example code in the doc face. These semantic faces do
+not depend on `scss2-fontify-details`. CSS installs no SassDoc rule, and the
+vendored highlight query stays unchanged.
+
 The buffer's grammar identity stays fixed even if loading a newer package changes
 the global snapshot identity. Features read that buffer identity. Compiled
 internal queries are session data keyed by that immutable identity and the query

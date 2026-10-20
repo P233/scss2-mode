@@ -123,6 +123,11 @@ parent match can otherwise be overwritten by a generic child capture."
               (replace-regexp-in-string
                (concat "@" (symbol-name (car mapping)) "\\_>")
                (concat "@" (symbol-name (cdr mapping))) (cadr sections) t t)))
+    (when (eq scss2-dialect 'scss)
+      (setcar (cdr sections)
+              (concat (cadr sections)
+                      "\n((inline_comment) @scss2--fontify-sassdoc\n"
+                      " (#match? @scss2--fontify-sassdoc \"^///\"))\n")))
     (append
      (treesit-font-lock-rules
       :language (scss2--language) :feature 'scss :override t (car sections)
@@ -141,6 +146,41 @@ parent match can otherwise be overwritten by a generic child capture."
           ((call_expression
             name: (function_name) @_name (:match "\\`\\(?:rgba?\\|hsla?\\)\\'" @_name))
            @scss2--fontify-color)))))))
+
+(defconst scss2--sassdoc-annotation-regexp
+  (concat "@" (regexp-opt '("access" "alias" "arg" "argument" "author" "content"
+                             "deprecated" "example" "exception" "group" "ignore"
+                             "link" "name" "output" "outputs" "param" "parameter"
+                             "prop" "property" "require" "requires" "return" "returns"
+                             "see" "since" "source" "throw" "throws" "todo" "type") t)
+          "\\(?:[ \t]\\|$\\)")
+  "SassDoc annotations and aliases at the start of a documentation line.")
+
+(defun scss2--fontify-sassdoc (node override start end &rest _)
+  "Highlight SassDoc NODE within START..END with OVERRIDE."
+  (let ((beginning (treesit-node-start node))
+        (limit (treesit-node-end node))
+        (case-fold-search nil))
+    (treesit-fontify-with-override beginning limit 'font-lock-doc-face override start end)
+    (save-excursion
+      (goto-char beginning)
+      (skip-chars-forward "/" limit)
+      (when (memq (char-after) '(?\s ?\t)) (forward-char))
+      (when (looking-at scss2--sassdoc-annotation-regexp)
+        (let ((parameter (member (match-string-no-properties 1)
+                                 '("param" "parameter" "arg" "argument"))))
+          (treesit-fontify-with-override
+           (point) (match-end 1) 'font-lock-doc-markup-face override start end)
+          (goto-char (match-end 1))
+          (skip-chars-forward " \t" limit)
+          (when (looking-at "{[^{}\n]+}")
+            (treesit-fontify-with-override
+             (point) (match-end 0) 'font-lock-type-face override start end)
+            (goto-char (match-end 0))
+            (skip-chars-forward " \t" limit))
+          (when (and parameter (looking-at "\\$[[:alnum:]_-]+"))
+            (treesit-fontify-with-override
+             (point) (match-end 0) 'font-lock-variable-name-face override start end)))))))
 
 (defvar scss2--color-name-regexp nil
   "Regexp matching a whole CSS color name, built on first use.")
