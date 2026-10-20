@@ -73,6 +73,8 @@ Matching is fuzzy: `display: ib` offers `inline-block`. The `scss2` completion s
 
 In a narrowed buffer, completion and commands read the whole syntax tree, as Font Lock does, but act only inside the restriction ([details](docs/architecture.md#narrowing-and-the-shared-parser)).
 
+`hs-minor-mode` folds bracketed blocks in both modes, `//` comment runs in SCSS and multiline `/* */` comments in CSS, keeping the opening-brace line of a multiline selector visible.
+
 TAB indents and moves through declarations and maps. Before a nonempty line's first nonblank character, TAB indents the line and moves to that character. In a property or variable name, or a Sass map key, TAB reindents the current line and jumps to the first character of its value. Multiline maps, including nested ones, follow the same sequence: leading whitespace, then key, then value. Inside the value, including nested functions, strings, URLs, and snippet fields, TAB jumps past the declaration's `;`. Correct indentation leaves the text unchanged; an active region or an inaccessible line beginning skips reindentation. These actions close an open completion menu without accepting it. Elsewhere, including blank lines between statements, or without a value or an accessible `;`, TAB keeps its usual snippet or indentation behavior.
 
 The modes neither load nor run Emacs's `css-mode`. They supply their own comment syntax, comment filling, color previews and indentation. Indentation nests by `scss2-indent-offset`, follows a block's existing indentation, and indents continued values and selectors as Prettier does; EditorConfig's `indent_size` sets `scss2-indent-offset`, and `css-indent-offset` is not read. `derived-mode-p` still matches `css-mode` in both modes and `scss-mode` in `scss2-mode`, but those modes' hooks and key bindings do not apply; use `scss2-mode-hook`, `css2-mode-hook` and their maps. Highlighting uses Font Lock faces plus `scss2-selector` and `scss2-property`, so themes own the palette.
@@ -165,6 +167,7 @@ Corfu is the supported completion frontend. Company works through standard compl
 - Inside a nested property such as `font: { weight: bold; }`, values complete under the full name (`font-weight`), but property names do not complete.
 - Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments.
 - In a short file, a last rule left open after a complete declaration, as in `.a { color: red;` at the end of the file, makes the whole file one parse error, so structural commands stop until `}` is typed; `electric-pair-mode` inserts it with `{`.
+- `hs-minor-mode` does not fold multiline `/* */` comments in SCSS. On a multiline selector, fold from the line with the `{`: from an earlier selector line, hideshow folds the enclosing block, or nothing at the top level.
 - Each open buffer keeps a syntax tree of tens of bytes per source byte; buffers shown in no window release it after `scss2-idle-release-delay`.
 - Parser limits, such as typed `attr()` unions, are listed in [tree-sitter-scss](https://github.com/P233/tree-sitter-scss#known-limits).
 
