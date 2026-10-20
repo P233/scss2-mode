@@ -15,7 +15,7 @@
                 ("core" '("scss2-grammar" "scss2-syntax" "scss2-context" "scss2-edit"))
                 ("semantic" '("scss2-grammar" "scss2-syntax" "scss2-completion"))
                 ("all" '("scss2-grammar" "scss2-syntax" "scss2-context" "scss2-edit"
-                         "scss2-completion" "scss2-eldoc" "scss2-emmet" "scss2" "css2-mode"
+                         "scss2-completion" "scss2-eldoc" "scss2-flymake" "scss2-emmet" "scss2" "css2-mode"
                          "scss2-mode"))
                 (_ (error "Unknown SCSS2_TEST_SUITE: %s" suite))))
        (tests (pcase suite

@@ -79,6 +79,15 @@ Eldoc shows parameter names and defaults inside resolved Sass mixin and function
 
 Signatures use one line, with comments removed and whitespace collapsed. Strings and comments inside call arguments keep the enclosing argument's highlight. The provider is registered only in SCSS buffers and reads module signatures during the same lookup as definition navigation.
 
+Flymake reports parse errors when you enable it. Both modes register `scss2-flymake` buffer-locally but leave `flymake-mode` off. To enable checks:
+
+```elisp
+(add-hook 'scss2-mode-hook #'flymake-mode)
+(add-hook 'css2-mode-hook #'flymake-mode)
+```
+
+The backend reports outermost `ERROR` ranges and missing tokens as errors, naming the missing token; a missing token marks the character at its insertion point. Each check stops at 200 diagnostics and says so in the last one. In a narrowed buffer it checks the whole buffer, or only the restriction when `font-lock-dont-widen` is non-nil. Indirect clones have no parser and report nothing.
+
 `hs-minor-mode` folds bracketed blocks in both modes, `//` comment runs in SCSS and multiline `/* */` comments in CSS, keeping the opening-brace line of a multiline selector visible.
 
 Imenu lists mixins, functions, module-level Sass variables, rules whose whole selector is one `%placeholder`, keyframes and rules, omitting empty categories. Outline headings stay on rules, mixins and functions.
@@ -179,7 +188,7 @@ Corfu is the supported completion frontend. Company works through standard compl
 - In a short file, a last rule left open after a complete declaration, as in `.a { color: red;` at the end of the file, makes the whole file one parse error, so structural commands stop until `}` is typed; `electric-pair-mode` inserts it with `{`.
 - `hs-minor-mode` does not fold multiline `/* */` comments in SCSS. On a multiline selector, fold from the line with the `{`: from an earlier selector line, hideshow folds the enclosing block, or nothing at the top level.
 - Each open buffer keeps a syntax tree of tens of bytes per source byte; buffers shown in no window release it after `scss2-idle-release-delay`.
-- Parser limits, such as typed `attr()` unions, are listed in [tree-sitter-scss](https://github.com/P233/tree-sitter-scss#known-limits).
+- Parser limits are listed in [tree-sitter-scss](https://github.com/P233/tree-sitter-scss#known-limits). Flymake reports the parser's errors without pattern suppression, including known false positives on valid typed `attr()` unions such as `attr(data-width type(<length> | <percentage>), 10px)` and a comment before a quoted `url()` argument such as `url(/* note */ "a.png")`. The backend does no Sass or CSS semantic validation.
 
 ## Development
 

@@ -13,6 +13,8 @@ flowchart TD
   Host --> Context[scss2-context: role and bounds]
   Host --> Completion[scss2-completion: candidates and name identity]
   Host --> Eldoc[scss2-eldoc: call signatures]
+  Host --> Flymake[scss2-flymake: parse diagnostics]
+  Flymake --> Syntax
   Eldoc --> Completion
   Eldoc --> Syntax
   Host --> Emmet[scss2-emmet: host adapter]
@@ -35,6 +37,7 @@ flowchart TD
 | `scss2-context` | `scss2-context-at-point` returns role, bounds and role-specific facts | Request-local reads only; no catalog, module I/O, host or Emmet dependency |
 | `scss2-completion` | `scss2-completion-for-context` supplies candidates and name identity; `scss2-completion-reference-at-point` reads names; `scss2-completion-definitions` returns locations | Tables are session-local; no classifier, host mode or Emmet adapter dependency |
 | `scss2-eldoc` | `scss2-eldoc-function` reads call arguments and presents resolved parameter text | Request-local data only; completion owns lookup, no host dependency |
+| `scss2-flymake` | `scss2-flymake` reports parse errors from Font Lock's tree view | Request-local traversal only; Flymake owns scheduling, no host dependency |
 | `scss2-edit` | Public structural commands and syntax-based TAB navigation | Targets live for one command; no context, completion or required frontend dependency |
 | `scss2-emmet` | Context provider, explicit expansion and abbreviation CAPF | One synchronous context binding; emmet2-mode owns live choices, revisions and insertion, which adds no snippet fields to CSS |
 | `scss2` | `scss2-completion-at-point` selects the provider; mode setup, font lock and navigation | Composition owns hook registration; semantic libraries never call back into it |
@@ -77,7 +80,8 @@ direct derivation cannot.
    its parser with a change notifier (see
    [Changed ranges of early reparses](#changed-ranges-of-early-reparses)) and
    extends syntax propertization back to the ranges a reparse changed.
-3. Full mode composition adds Emmet, highlighting, navigation and the CAPF hook,
+3. Full mode composition adds Emmet, highlighting, navigation, the Flymake
+   backend and the CAPF hook,
    then makes treesit.el's tree hooks and commands read Font Lock's view (see
    [Narrowing and the shared parser](#narrowing-and-the-shared-parser)).
    A syntax-only client can stop after step 2.
@@ -364,6 +368,43 @@ CSS and unresolved calls return nil so other eldoc providers can run. Unparsed
 or unclosed argument lists, `@content` calls and `using (...)` parameters are
 ignored. Eldoc does not add recovery to the grammar or change completion's
 argument interpretation.
+
+## Parse diagnostics
+
+`scss2` registers `scss2-flymake` in the buffer-local
+`flymake-diagnostic-functions` after parser setup in both dialects. It does not
+enable `flymake-mode`. Flymake owns check scheduling and published diagnostics;
+the backend adds no timer, cache, font-lock, after-change or post-command work.
+
+The backend reads the existing parser through `scss2--with-font-lock-view` and
+`scss2--root-node`. With the default
+`font-lock-dont-widen`, a narrowed buffer gets whole-buffer diagnostics, including
+errors outside the restriction. Point and narrowing stay unchanged. A non-nil
+`font-lock-dont-widen` selects the same restricted parse as Font Lock.
+
+A root without `has-error` reports nil without traversal. Otherwise an iterative
+depth-first walk skips clean subtrees and stops descending at `ERROR` nodes,
+reporting only the outermost range. Visible MISSING tokens report their type and
+insertion point. Hidden MISSING tokens have no child node: when a visible
+node has errors but no erroneous child, its S-expression supplies the
+`(MISSING ...)` type, without a hidden rule's leading underscore, and the
+diagnostic uses that node's start. A node with an erroneous child reports only
+that child. In this snapshot, `@keyframes;` produces an `ERROR`, while
+`@keyframes {}` reports a missing identifier at the keyframes name position.
+
+A buffer without a parser, such as a `clone-indirect-buffer` clone, reports no
+diagnostics instead of signaling, so Flymake keeps the backend enabled. The
+clone shares the base buffer's Flymake state, so the base shows its diagnostics
+again at its next check.
+
+Flymake discards empty diagnostic ranges. Missing tokens mark one character
+starting at their position, or the preceding character at EOF.
+
+Children are read one at a time, so reaching the 200-diagnostic limit does not
+enumerate the remaining siblings. The final diagnostic announces the limit and
+possible omissions. The backend reports the grammar's decisions, including its
+known errors on valid typed `attr()` unions and comments before quoted `url()`
+arguments. It applies no source-pattern suppression or semantic validation.
 
 ## Structural mutation and history
 

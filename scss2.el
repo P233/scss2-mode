@@ -20,6 +20,7 @@
 (require 'scss2-edit)
 (require 'scss2-completion)
 (require 'scss2-eldoc)
+(require 'scss2-flymake)
 (require 'scss2-emmet)
 
 (defvar shr-color-html-colors-alist)
@@ -618,6 +619,7 @@ syntactic highlighting of comments and strings."
     (add-hook 'xref-backend-functions #'scss2--xref-backend nil t)
     (when (eq dialect 'scss)
       (add-hook 'eldoc-documentation-functions #'scss2-eldoc-function nil t))
+    (add-hook 'flymake-diagnostic-functions #'scss2-flymake nil t)
     (add-hook 'emmet2-mode-hook #'scss2--own-completion nil t)
     (treesit-major-mode-setup)
     (scss2--widen-tree-hooks)
