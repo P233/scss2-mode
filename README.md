@@ -13,7 +13,7 @@ Parsing targets complete files, and error recovery is deliberately narrow. A sta
 - emmet2-mode 2.0.0 or later, installed as a dependency; the 0.2 series is incompatible.
 - Python 3 and Git, only to build a local package archive without straight.el.
 
-CI runs on Linux and macOS. Indented Sass (`.sass`) is not supported.
+scss2-mode is developed on macOS and checked by CI on Linux. Indented Sass (`.sass`) is not supported.
 
 ## Install
 
@@ -209,7 +209,7 @@ python3 scripts/vendor-parser.py --source /path/to/tree-sitter-scss
 SCSS2_EMMET2_DIR=/path/to/emmet2-mode make check
 ```
 
-The manifest records imported content, including uncommitted changes; `make package` requires a committed snapshot. CI runs `make check test-frontends` and `make package` with Emacs 31.1 on Linux and macOS against the emmet2-mode commit pinned in the workflow; advance that pin in the commit that starts depending on newer emmet2-mode code.
+The manifest records imported content, including uncommitted changes; `make package` requires a committed snapshot. CI runs `make check test-frontends` and `make package` with Emacs 31.1 on Linux against the emmet2-mode commit pinned in the workflow; advance that pin in the commit that starts depending on newer emmet2-mode code.
 
 </details>
 
