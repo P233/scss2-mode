@@ -525,6 +525,52 @@ shares, including buffers above `treesit-max-buffer-size'."
                                   :filter ,(apply-partially #'scss2--tree-binding
                                                             map key))))))))
 
+(declare-function xref-make "xref" (summary location))
+(declare-function xref-make-buffer-location "xref" (buffer position))
+(declare-function xref-make-file-location "xref" (file line column))
+
+(defun scss2--xref-backend ()
+  "Select the definition backend in a parsed stylesheet buffer."
+  (and (treesit-parser-list nil (scss2--language)) 'scss2))
+
+(defun scss2--xref-identifier-references (identifier)
+  "Decode IDENTIFIER's reference property or infer kinds from typed text."
+  (or (when (> (length identifier) 0)
+        (when-let* ((reference (get-text-property 0 'scss2-reference identifier)))
+          (list reference)))
+      (let ((name (substring-no-properties identifier)) module)
+        (unless (string-match-p "\\`[$%]\\|\\`--" name)
+          (when (string-match "\\`\\(.+\\)\\.\\([^.]+\\)\\'" name)
+            (setq module (match-string 1 name) name (match-string 2 name))))
+        (mapcar (lambda (kind) (list kind module name))
+                (cond ((string-prefix-p "$" name) '(variable))
+                      ((string-prefix-p "%" name) '(placeholder))
+                      ((string-prefix-p "--" name) '(custom-property))
+                      (t '(mixin function)))))))
+
+(with-eval-after-load 'xref
+  (cl-defmethod xref-backend-identifier-at-point ((_backend (eql scss2)))
+    (when-let* ((reference (scss2-completion-reference-at-point)))
+      (pcase-let ((`(,_kind ,module ,name) reference))
+        (propertize (concat (and module (concat module ".")) name)
+                    'scss2-reference reference))))
+
+  (cl-defmethod xref-backend-definitions ((_backend (eql scss2)) identifier)
+    (cl-loop for reference in (scss2--xref-identifier-references identifier)
+             for definitions = (scss2-completion-definitions reference)
+             when definitions return
+             (mapcar (lambda (definition)
+                       (xref-make
+                        (plist-get definition :summary)
+                        ;; File locations re-check the file's modification time and can prompt.
+                        (if (buffer-live-p (plist-get definition :buffer))
+                            (xref-make-buffer-location (plist-get definition :buffer)
+                                                       (plist-get definition :position))
+                          (xref-make-file-location (plist-get definition :file)
+                                                   (plist-get definition :line)
+                                                   (plist-get definition :column)))))
+                     definitions))))
+
 (defun scss2--setup (dialect)
   "Set up shared editing for DIALECT with exactly one SCSS-grammar parser.
 As in built-in Tree-sitter modes, a buffer larger than
@@ -568,6 +614,7 @@ syntactic highlighting of comments and strings."
     ;; Otherwise `treesit-major-mode-setup' takes outline headings from Imenu.
     (setq-local treesit-outline-predicate treesit-defun-type-regexp)
     (scss2--own-completion)
+    (add-hook 'xref-backend-functions #'scss2--xref-backend nil t)
     (add-hook 'emmet2-mode-hook #'scss2--own-completion nil t)
     (treesit-major-mode-setup)
     (scss2--widen-tree-hooks)

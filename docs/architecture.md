@@ -30,7 +30,7 @@ flowchart TD
 | `scss2-grammar` | `scss2-grammar-ensure` loads a private dialect identity; compilation and disk cache | Owns native-source/platform identity, native artifacts and load verification; no editor feature dependencies |
 | `scss2-syntax` | `scss2-syntax-lexical-setup` installs syntax table, comments and indentation without a parser; `scss2-syntax-setup` initializes the parser and syntax properties; shared node/identity/range readers | Owns buffer dialect, loaded language and session-compiled internal queries; no completion, editing, host or Emmet dependency |
 | `scss2-context` | `scss2-context-at-point` returns role, bounds and role-specific facts | Request-local reads only; no catalog, module I/O, host or Emmet dependency |
-| `scss2-completion` | `scss2-completion-for-context` consumes explicit context plus the current parsed buffer; supplies candidates and name identity to `emmet2-completion-capf` | Tables are session-local; no classifier, host mode or Emmet adapter dependency |
+| `scss2-completion` | `scss2-completion-for-context` supplies candidates and name identity; `scss2-completion-reference-at-point` reads names; `scss2-completion-definitions` returns locations | Tables are session-local; no classifier, host mode or Emmet adapter dependency |
 | `scss2-edit` | Public structural commands and syntax-based TAB navigation | Targets live for one command; no context, completion or required frontend dependency |
 | `scss2-emmet` | Context provider, explicit expansion and abbreviation CAPF | One synchronous context binding; emmet2-mode owns live choices, revisions and insertion, which adds no snippet fields to CSS |
 | `scss2` | `scss2-completion-at-point` selects the provider; mode setup, font lock and navigation | Composition owns hook registration; semantic libraries never call back into it |
@@ -52,8 +52,8 @@ block after an unfinished statement stays editable with undo/redo, and that
 repair restores editing and the same face spans as a fresh buffer.
 
 The two major modes, the `scss2-completion-at-point` autoload, the `scss2`
-completion category and the structural commands that the README describes are
-the stable public interface. Other code uses the interfaces above; private `--`
+completion category and the structural commands and standard xref definition commands that the README
+describes are the stable public interface. Other code uses the interfaces above; private `--`
 helpers belong to their library.
 
 For a new feature, first identify its owner and behavioral contract, then change
@@ -283,6 +283,42 @@ the command dismisses completion previews before indenting and resolves the
 destination again after indentation changes positions. Other snippet navigation
 keys keep their own behavior; outside these indentation and declaration targets,
 TAB keeps its existing binding.
+
+## Definition lookup
+
+`scss2-completion-reference-at-point` returns `(KIND MODULE NAME)` with source
+spellings and no xref dependency. `scss2-completion-definitions` is the single
+entry point for definition lookup. It accepts that list and returns location
+plists with `:kind`, `:name`, `:buffer`, `:file`, `:position`, `:line`, `:column`
+and `:summary`. Positions and lines are absolute. Summaries are trimmed source
+lines capped at 160 characters. Nodes are materialized before temporary module
+trees are released.
+
+Lookup shares visible binding nodes, lexical binders and custom-property
+`(NODE . NAME)` entries with completion. Syntax owns the shared `var()`
+first-argument reader, including text recovery. Local Sass lookup chooses the
+nearest preceding binding and treats `!global` as module scope. Inside mixin
+and function bodies, a missing binding falls back to the first later
+module-level definition. Keyword-argument names resolve only to the callee's
+parameters. No Sass execution or conditional evaluation is performed.
+
+Module lookup resolves its path and open buffer once, then uses completion's
+public-definition and source readers, including unsaved buffers. `@forward`,
+`@import`, `sass:` modules, packages and load paths are not followed and
+unqualified `as *` members are unsupported. Custom-property lookup returns all
+matching declarations without evaluating the CSS cascade. No index, cache,
+invalidation path or background work is added. The existing `argument`
+completion branch retains its own mixin selection to preserve its candidate
+contract; it is separate from definition navigation.
+
+`scss2` owns xref encoding, typed-name fallback and buffer-local registration.
+The identifier is source text with `(KIND MODULE NAME)` in a text property.
+Unpropertized `$`, `%` and `--` names select their kinds; bare names try mixins
+then functions. Methods are installed when xref loads, so requiring the mode
+does not load xref. Indirect clones without a parser decline the backend.
+Unresolved names return nil for xref's standard message. There is no identifier
+completion table or reference-search method; stock xref reference fallback
+receives the plain name.
 
 ## Structural mutation and history
 
@@ -613,7 +649,27 @@ another package changed it, stays unchanged and keeps that behavior. Strict
 byte compilation reports a removed treesit.el command or
 `prog--text-at-point-p` as not known to be defined.
 
+Xref uses the same tree view to collect every result and preserves point and
+narrowing during lookup. Results in open buffers use buffer locations, which
+never recheck the file on disk; module files that are not open use file
+locations with line and column, and their results carry no buffer. Visiting a result uses
+stock `xref--goto-char`: it widens by default and signals when the target is
+inaccessible and `widen-automatically` is nil. Result lists may therefore include
+definitions on both sides of the restriction. This behavior is separate from
+the editing and motion wrappers above.
+
 ### Tests and diagnosis
+
+`test/scss2-xref-test.el` adds these navigation contracts:
+
+- `scss2-xref-narrowing-reads-wide-and-preserves-restriction`: lookup returns
+  outside locations without moving point or changing the restriction.
+- `scss2-xref-narrowed-result-set-straddles-restriction`: all matching results
+  remain available even when only some are accessible.
+- `scss2-xref-jump-obeys-widen-automatically`: stock jumps widen or signal
+  according to the user option.
+- `scss2-xref-definition-jump-back-and-other-window`: definition navigation,
+  history return and the standard other-window command.
 
 `test/scss2-narrowing-test.el` guards this behavior:
 

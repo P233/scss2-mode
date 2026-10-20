@@ -71,7 +71,9 @@ Matching is fuzzy: `display: ib` offers `inline-block`. The `scss2` completion s
 (add-to-list 'completion-category-overrides '(scss2 (styles basic partial-completion)))
 ```
 
-In a narrowed buffer, completion and commands read the whole syntax tree, as Font Lock does, but act only inside the restriction ([details](docs/architecture.md#narrowing-and-the-shared-parser)).
+In a narrowed buffer, completion and commands read the whole syntax tree, as Font Lock does, but editing and motion act only inside the restriction. Definition jumps follow xref: they widen by default and signal an error when `widen-automatically` is nil ([details](docs/architecture.md#narrowing-and-the-shared-parser)).
+
+`M-.` (`xref-find-definitions`) finds Sass variables, mixins in `@include`, functions in calls and placeholder rules in `@extend`. Qualified names read local `@use` modules, including unsaved open buffers. Both modes also find custom-property declarations from `var(--name)`. `M-,` returns through xref history; the standard other-window definition command also works.
 
 `hs-minor-mode` folds bracketed blocks in both modes, `//` comment runs in SCSS and multiline `/* */` comments in CSS, keeping the opening-brace line of a multiline selector visible.
 
@@ -164,8 +166,9 @@ Corfu is the supported completion frontend. Company works through standard compl
 
 ## Known limits
 
-- Module completion reads local `@use` files, including unsaved edits in open buffers, but does not follow `@forward`. Unqualified variables, functions and mixins come only from the current file, not from `@import`ed files.
-- Built-in modules such as `sass:math`, package and load-path modules, and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: later completion functions do not run, even without a match.
+- Definition lookup does not follow `@forward`, `@import`, built-in `sass:` modules, packages or load paths. Unqualified `as *` members are unsupported. Sass bindings use scope and source order: inside mixin or function bodies and their parameter defaults an unresolved name falls back to its first later module-level definition, while uses at module level still require an earlier declaration. Sass execution and the CSS cascade are not evaluated; custom-property lookup returns all matching declarations. Reference search uses only xref's stock fallback.
+- Module completion reads local `@use` files, including unsaved edits in open buffers, but does not follow `@forward`. Unqualified variables, functions and mixins come only from the current file, not from `@import`ed files or `@use` modules loaded `as *`.
+- Built-in modules such as `sass:math`, package and load-path modules and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: later completion functions do not run, even without a match.
 - Inside a nested property such as `font: { weight: bold; }`, values complete under the full name (`font-weight`), but property names do not complete.
 - Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments.
 - In a short file, a last rule left open after a complete declaration, as in `.a { color: red;` at the end of the file, makes the whole file one parse error, so structural commands stop until `}` is typed; `electric-pair-mode` inserts it with `{`.
