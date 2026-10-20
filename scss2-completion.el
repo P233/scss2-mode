@@ -54,6 +54,10 @@
   "Return the Sass identity of TEXT, retaining its case."
   (string-replace "_" "-" (scss2--decode-identifier text)))
 
+(defalias 'scss2-completion-sass-name #'scss2-completion--sass-name
+  "Return the Sass identity of TEXT, retaining its case.
+Decode CSS escapes and treat underscores as hyphens.")
+
 (defun scss2-completion--visible-p (node position)
   "Whether NODE's containing block is visible at POSITION."
   (let ((parent (treesit-node-parent node)) scope)
@@ -404,13 +408,17 @@ KIND is variable, mixin, function, placeholder or custom-property."
            :key (lambda (node) (scss2-completion--sass-name (scss2-completion--text node)))
            :test #'equal))
 
-(defun scss2-completion--sass-definition (reference &optional parameter)
-  "Resolve Sass REFERENCE, optionally selecting its named PARAMETER."
+(defun scss2-completion--sass-definition (reference &optional parameter reader)
+  "Resolve Sass REFERENCE, optionally selecting its named PARAMETER.
+READER projects the resolved target while its tree is alive."
   (pcase-let ((`(,kind ,module ,name) reference))
     (let ((project (lambda (node file buffer)
                      (when-let* ((target (if parameter (scss2-completion--parameter node parameter) node)))
-                       (list (scss2-completion--definition-location
-                              target (if parameter 'variable kind) (or parameter name) file buffer))))))
+                       (let ((location (scss2-completion--definition-location
+                                        target (if parameter 'variable kind) (or parameter name) file buffer)))
+                         (when reader
+                           (setq location (plist-put location :value (funcall reader target))))
+                         (list location))))))
       (if module
           (when-let* ((file (scss2-completion--module-path module))
                       (_ (not (equal (file-name-extension file) "css"))))
@@ -428,13 +436,17 @@ KIND is variable, mixin, function, placeholder or custom-property."
         (when-let* ((node (scss2-completion--local-definition kind name)))
           (funcall project (if parameter (treesit-node-parent node) node) nil (current-buffer)))))))
 
-(defun scss2-completion-definitions (reference)
+(defun scss2-completion-definitions (reference &optional reader)
   "Return location plists for (KIND MODULE NAME) REFERENCE at point.
 Results contain :kind, :name, :buffer, :file, :position, :line, :column and
 :summary; :buffer is nil for a module file that is not open. Positions are
 absolute. Read Font Lock's tree view and preserve point and narrowing. Local
 @use reads include unsaved buffers. Return nil for unresolved names; see
-docs/architecture.md for lookup rules and limits."
+docs/architecture.md for lookup rules and limits.
+For Sass variables, mixins and functions, optional READER is called with
+the resolved name node, including a keyword argument's parameter node.
+Its result is stored as :value. READER runs in the source buffer's tree
+view and must copy its result before temporary module trees are released."
   (scss2--with-font-lock-view
    (pcase-let ((`(,kind ,module ,spelling) reference))
      (when (and (memq kind '(variable mixin function placeholder custom-property))
@@ -456,7 +468,7 @@ docs/architecture.md for lookup rules and limits."
              (when callee
                (scss2-completion--sass-definition
                 (list (if (equal (treesit-node-type call) "include_statement") 'mixin 'function)
-                      namespace (scss2-completion--sass-name callee)) name))))
+                      namespace (scss2-completion--sass-name callee)) name reader))))
           ((eq kind 'custom-property)
            (cl-loop for (node . property) in (scss2-completion--custom-properties)
                     when (equal property name)
@@ -469,7 +481,7 @@ docs/architecture.md for lookup rules and limits."
                               (equal (scss2-completion--sass-name (or (scss2--identifier-text node) "")) name))
                     collect (scss2-completion--definition-location node kind name)))
           ((and (eq scss2-dialect 'scss) (memq kind '(variable mixin function)))
-           (scss2-completion--sass-definition (list kind module name)))))))))
+           (scss2-completion--sass-definition (list kind module name) nil reader))))))))
 
 (defun scss2-completion--values (property &optional at-rule)
   "Return shared CSS values for PROPERTY in AT-RULE plus visible Sass names."

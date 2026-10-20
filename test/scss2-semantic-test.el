@@ -39,5 +39,24 @@
                  (list :role 'property :beg (- (point) 3) :end (point))))
     (should-not (scss2-completion-for-context nil))))
 
+(ert-deftest scss2-semantic-definition-reader-is-optional ()
+  (dolist (case '(("$x: red; .a { color: $x│; }" "$x")
+                  ("@mixin m($size) {} @include m│(1);" "m")
+                  ("@mixin m($size) {} @include m($size│: 1);" "$size")))
+    (scss2-test-with-buffer 'scss2-mode (car case)
+      (let* ((reference (scss2-completion-reference-at-point))
+             (plain (scss2-completion-definitions reference))
+             (calls 0)
+             (projected (scss2-completion-definitions
+                         reference (lambda (node)
+                                     (cl-incf calls)
+                                     (treesit-node-text node t)))))
+        (should (= calls 1))
+        (should (equal (plist-get (car projected) :value) (cadr case)))
+        (should-not (plist-member (car plain) :value))
+        (should (equal (cl-loop for (key value) on (car projected) by #'cddr
+                               unless (eq key :value) append (list key value))
+                       (car plain)))))))
+
 (provide 'scss2-semantic-test)
 ;;; scss2-semantic-test.el ends here

@@ -12,6 +12,9 @@ flowchart TD
   Modes[scss2-mode / css2-mode] --> Host[scss2: composition and highlighting]
   Host --> Context[scss2-context: role and bounds]
   Host --> Completion[scss2-completion: candidates and name identity]
+  Host --> Eldoc[scss2-eldoc: call signatures]
+  Eldoc --> Completion
+  Eldoc --> Syntax
   Host --> Emmet[scss2-emmet: host adapter]
   Host --> Edit[scss2-edit: structural commands]
   Emmet --> Context
@@ -31,6 +34,7 @@ flowchart TD
 | `scss2-syntax` | `scss2-syntax-lexical-setup` installs syntax table, comments and indentation without a parser; `scss2-syntax-setup` initializes the parser and syntax properties; shared node/identity/range readers | Owns buffer dialect, loaded language and session-compiled internal queries; no completion, editing, host or Emmet dependency |
 | `scss2-context` | `scss2-context-at-point` returns role, bounds and role-specific facts | Request-local reads only; no catalog, module I/O, host or Emmet dependency |
 | `scss2-completion` | `scss2-completion-for-context` supplies candidates and name identity; `scss2-completion-reference-at-point` reads names; `scss2-completion-definitions` returns locations | Tables are session-local; no classifier, host mode or Emmet adapter dependency |
+| `scss2-eldoc` | `scss2-eldoc-function` reads call arguments and presents resolved parameter text | Request-local data only; completion owns lookup, no host dependency |
 | `scss2-edit` | Public structural commands and syntax-based TAB navigation | Targets live for one command; no context, completion or required frontend dependency |
 | `scss2-emmet` | Context provider, explicit expansion and abbreviation CAPF | One synchronous context binding; emmet2-mode owns live choices, revisions and insertion, which adds no snippet fields to CSS |
 | `scss2` | `scss2-completion-at-point` selects the provider; mode setup, font lock and navigation | Composition owns hook registration; semantic libraries never call back into it |
@@ -291,8 +295,11 @@ spellings and no xref dependency. `scss2-completion-definitions` is the single
 entry point for definition lookup. It accepts that list and returns location
 plists with `:kind`, `:name`, `:buffer`, `:file`, `:position`, `:line`, `:column`
 and `:summary`. Positions and lines are absolute. Summaries are trimmed source
-lines capped at 160 characters. Nodes are materialized before temporary module
-trees are released.
+lines capped at 160 characters. An optional `READER` for Sass variables,
+mixins and functions projects the resolved name node, including a keyword
+argument's parameter node, into `:value` before a temporary module tree is
+released. Calls without `READER` retain the original location contract.
+Readers must return copied data rather than live nodes.
 
 Lookup shares visible binding nodes, lexical binders and custom-property
 `(NODE . NAME)` entries with completion. Syntax owns the shared `var()`
@@ -319,6 +326,44 @@ does not load xref. Indirect clones without a parser decline the backend.
 Unresolved names return nil for xref's standard message. There is no identifier
 completion table or reference-search method; stock xref reference fallback
 receives the plain name.
+
+## Call signatures
+
+`scss2` registers `scss2-eldoc-function` in the buffer-local
+`eldoc-documentation-functions` only for SCSS. CSS buffers gain no eldoc hooks
+from this provider. The provider runs on eldoc requests, with no
+font-lock, after-change or post-command hook. It first checks the dialect and
+parser, then walks the ancestors around point in Font Lock's tree view. Outside
+a call's argument interior it returns nil without a definition query. The
+innermost call wins, including when that call cannot resolve.
+
+Inside arguments, the provider moves temporarily to the callee and calls
+`scss2-completion-reference-at-point` and `scss2-completion-definitions` with
+a signature reader. Completion's single source reader supplies the definition
+node in the authoritative tree view, including unsaved module text and
+`font-lock-dont-widen`. Each unopened module is read once; completion owns
+file-error handling, property-free source copying and early temporary-tree
+release. There is no second resolver, module reader, index, signature cache or
+retained parser. The provider copies `(SIGNATURE . THING)` inside the tree view,
+then restores point and narrowing before invoking the eldoc callback, so
+synchronous display functions see the original buffer context.
+
+The callback receives a single-line parameter list with defaults, plus
+`:thing` for the qualified callee and `:face` for its name. Parameter nodes are
+joined with commas, comments are removed and whitespace is collapsed. The
+selected parameter is marked during the join with
+`eldoc-highlight-function-argument`. Direct argument commas select the
+positional parameter. Keyword names use `scss2-completion-sass-name`, the public
+alias for completion's Sass identity rule; a variable followed by a colon also
+handles the parser's incomplete keyword value. A rest parameter receives extra
+positions and unmatched keywords; argument spreads count as one syntactic
+argument. Strings and comments inside arguments keep that argument's highlight.
+No Sass evaluation is attempted.
+
+CSS and unresolved calls return nil so other eldoc providers can run. Unparsed
+or unclosed argument lists, `@content` calls and `using (...)` parameters are
+ignored. Eldoc does not add recovery to the grammar or change completion's
+argument interpretation.
 
 ## Structural mutation and history
 

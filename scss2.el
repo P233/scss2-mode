@@ -19,6 +19,7 @@
 (require 'scss2-context)
 (require 'scss2-edit)
 (require 'scss2-completion)
+(require 'scss2-eldoc)
 (require 'scss2-emmet)
 
 (defvar shr-color-html-colors-alist)
@@ -615,6 +616,8 @@ syntactic highlighting of comments and strings."
     (setq-local treesit-outline-predicate treesit-defun-type-regexp)
     (scss2--own-completion)
     (add-hook 'xref-backend-functions #'scss2--xref-backend nil t)
+    (when (eq dialect 'scss)
+      (add-hook 'eldoc-documentation-functions #'scss2-eldoc-function nil t))
     (add-hook 'emmet2-mode-hook #'scss2--own-completion nil t)
     (treesit-major-mode-setup)
     (scss2--widen-tree-hooks)

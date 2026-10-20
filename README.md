@@ -75,6 +75,10 @@ In a narrowed buffer, completion and commands read the whole syntax tree, as Fon
 
 `M-.` (`xref-find-definitions`) finds Sass variables, mixins in `@include`, functions in calls and placeholder rules in `@extend`. Qualified names read local `@use` modules, including unsaved open buffers. Both modes also find custom-property declarations from `var(--name)`. `M-,` returns through xref history; the standard other-window definition command also works.
 
+Eldoc shows parameter names and defaults inside resolved Sass mixin and function calls, including local `@use` members. In `@include paint(1, |)`, it highlights the second parameter; in `tint($amount: |)`, it highlights `$amount`. Nested calls show the innermost signature. Rest parameters receive extra positional arguments and unmatched keywords. Lookup follows the same rules as definition navigation and adds no index or cache.
+
+Signatures use one line, with comments removed and whitespace collapsed. Strings and comments inside call arguments keep the enclosing argument's highlight. The provider is registered only in SCSS buffers and reads module signatures during the same lookup as definition navigation.
+
 `hs-minor-mode` folds bracketed blocks in both modes, `//` comment runs in SCSS and multiline `/* */` comments in CSS, keeping the opening-brace line of a multiline selector visible.
 
 Imenu lists mixins, functions, module-level Sass variables, rules whose whole selector is one `%placeholder`, keyframes and rules, omitting empty categories. Outline headings stay on rules, mixins and functions.
@@ -166,6 +170,7 @@ Corfu is the supported completion frontend. Company works through standard compl
 
 ## Known limits
 
+- Eldoc leaves CSS functions, unresolved calls, unparsed or unclosed argument lists, `@content` calls and `using (...)` parameters to other providers. Argument spreads count as one syntactic argument; their runtime contents are not evaluated.
 - Definition lookup does not follow `@forward`, `@import`, built-in `sass:` modules, packages or load paths. Unqualified `as *` members are unsupported. Sass bindings use scope and source order: inside mixin or function bodies and their parameter defaults an unresolved name falls back to its first later module-level definition, while uses at module level still require an earlier declaration. Sass execution and the CSS cascade are not evaluated; custom-property lookup returns all matching declarations. Reference search uses only xref's stock fallback.
 - Module completion reads local `@use` files, including unsaved edits in open buffers, but does not follow `@forward`. Unqualified variables, functions and mixins come only from the current file, not from `@import`ed files or `@use` modules loaded `as *`.
 - Built-in modules such as `sass:math`, package and load-path modules and import paths with a scheme or without a local directory are left to other completion functions. Elsewhere semantic completion is exclusive: later completion functions do not run, even without a match.

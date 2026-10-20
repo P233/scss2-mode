@@ -15,7 +15,7 @@
                 ("core" '("scss2-grammar" "scss2-syntax" "scss2-context" "scss2-edit"))
                 ("semantic" '("scss2-grammar" "scss2-syntax" "scss2-completion"))
                 ("all" '("scss2-grammar" "scss2-syntax" "scss2-context" "scss2-edit"
-                         "scss2-completion" "scss2-emmet" "scss2" "css2-mode"
+                         "scss2-completion" "scss2-eldoc" "scss2-emmet" "scss2" "css2-mode"
                          "scss2-mode"))
                 (_ (error "Unknown SCSS2_TEST_SUITE: %s" suite))))
        (tests (pcase suite
@@ -56,7 +56,7 @@
         (setq exit-code (if (scss2-test-run (expand-file-name "test" root) tests) 0 1))
         ;; Enforce real module boundaries, including indirect runtime loads.
         (unless (equal suite "all")
-          (dolist (feature (append '(scss2 scss2-mode css2-mode scss2-emmet emmet2-mode)
+          (dolist (feature (append '(scss2 scss2-mode css2-mode scss2-emmet scss2-eldoc emmet2-mode)
                                    (if (equal suite "core")
                                        '(scss2-completion emmet2-css-data emmet2-fuzzy)
                                      '(scss2-context scss2-edit))))
