@@ -62,6 +62,13 @@
     (scss2-highlighting-test--face "@unknown {Map} $plain" 'font-lock-doc-face)
     (scss2-highlighting-test--face "@parametric $plain" 'font-lock-doc-face)))
 
+(ert-deftest scss2-highlighting-sassdoc-carriage-returns ()
+  ;; A file read without CRLF decoding keeps a carriage return before each newline.
+  (scss2-highlighting-test--with-buffer 'scss2-mode
+      "/// @ignore\r\n/// @return\r\n/// @param {Map} $a\r\n@function f($a) { @return $a; }\r\n"
+    (dolist (text '("@ignore" "@return" "@param"))
+      (scss2-highlighting-test--face text 'font-lock-doc-markup-face))))
+
 (ert-deftest scss2-highlighting-sassdoc-leaves-other-comments-and-code-alone ()
   (dolist (mode '(scss2-mode css2-mode))
     (scss2-highlighting-test--with-buffer mode

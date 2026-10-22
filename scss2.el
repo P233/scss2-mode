@@ -153,7 +153,7 @@ parent match can otherwise be overwritten by a generic child capture."
                              "link" "name" "output" "outputs" "param" "parameter"
                              "prop" "property" "require" "requires" "return" "returns"
                              "see" "since" "source" "throw" "throws" "todo" "type") t)
-          "\\(?:[ \t]\\|$\\)")
+          "\\(?:[ \t\r]\\|$\\)")
   "SassDoc annotations and aliases at the start of a documentation line.")
 
 (defun scss2--fontify-sassdoc (node override start end &rest _)
