@@ -73,5 +73,8 @@ not enable `flymake-mode'."
                                       (format "Missing %s" (string-trim-left type "_"))))))))))))))))))
     (funcall report-fn (nreverse diagnostics))))
 
+;; The backend reads the parse tree and runs no code from the buffer.
+(put 'scss2-flymake 'flymake-always-safe t)
+
 (provide 'scss2-flymake)
 ;;; scss2-flymake.el ends here

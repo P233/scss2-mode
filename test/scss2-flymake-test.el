@@ -78,6 +78,8 @@
         (should (local-variable-p 'flymake-diagnostic-functions))
         (should (memq #'scss2-flymake flymake-diagnostic-functions))
         (should-not (bound-and-true-p flymake-mode))))
+    ;; Flymake may skip backends in untrusted buffers unless they are marked safe.
+    (should (function-get #'scss2-flymake 'flymake-always-safe))
     (should (equal global (default-value 'flymake-diagnostic-functions)))))
 
 (ert-deftest scss2-flymake-user-hook-enables-real-flymake ()
