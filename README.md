@@ -189,6 +189,7 @@ Corfu is the supported completion frontend. Company works through standard compl
 - Some unfinished code completes poorly, such as `var(` inside unclosed `@include` arguments.
 - In a short file, a last rule left open after a complete declaration, as in `.a { color: red;` at the end of the file, makes the whole file one parse error, so structural commands stop until `}` is typed; `electric-pair-mode` inserts it with `{`.
 - `hs-minor-mode` does not fold multiline `/* */` comments in SCSS. On a multiline selector, fold from the line with the `{`: from an earlier selector line, hideshow folds the enclosing block, or nothing at the top level.
+- SassDoc highlighting applies to every `///` comment, so a `///` comment after code on the same line, as in `.a { b: c; } /// note`, and a line of slashes also use the doc face.
 - Each open buffer keeps a syntax tree of tens of bytes per source byte; buffers shown in no window release it after `scss2-idle-release-delay`.
 - Parser limits are listed in [tree-sitter-scss](https://github.com/P233/tree-sitter-scss#known-limits). Flymake reports the parser's errors without pattern suppression, including known false positives on valid typed `attr()` unions such as `attr(data-width type(<length> | <percentage>), 10px)` and a comment before a quoted `url()` argument such as `url(/* note */ "a.png")`. The backend does no Sass or CSS semantic validation.
 
